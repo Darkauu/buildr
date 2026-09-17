@@ -16,6 +16,14 @@
  * To add a new semantic color:
  * 1. Add the variable to :root (light value) and .dark (dark value)
  * 2. Register it in @theme inline as --color-<name>: var(--<name>)
+ *
+ * Palette — STRATA:
+ *   charcoal #3C0016 · red #F92424 · peach #D1C0A5 · white #EFEEE8
+ *
+ * Contrast budget (WCAG AA):
+ *   charcoal on white 15.0:1 · peach on charcoal 9.8:1 · muted on white 5.5:1
+ *   charcoal on red 4.4:1 (display type only) · red on white 3.4:1 (display
+ *   type and fills only — never small text).
  */
 
 @theme inline {
@@ -48,10 +56,14 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-ring-offset-background: var(--background);
+  --color-charcoal: var(--charcoal);
   --color-coral: var(--coral);
   --color-coral-foreground: var(--coral-foreground);
   --color-tech: var(--tech);
   --color-surface: var(--surface);
+  --color-on-dark: var(--on-dark);
+  --color-ink-deep: var(--ink-deep);
+  --color-muted-on-dark: var(--muted-on-dark);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -69,82 +81,106 @@
 
 :root {
   --radius: 0.375rem;
-  --background: oklch(0.955 0.017 89.1);
-  --foreground: oklch(0.198 0 0);
-  --card: oklch(0.955 0.017 89.1);
-  --card-foreground: oklch(0.198 0 0);
-  --popover: oklch(0.955 0.017 89.1);
-  --popover-foreground: oklch(0.198 0 0);
-  --primary: oklch(0.198 0 0);
-  --primary-foreground: oklch(0.955 0.017 89.1);
-  --secondary: oklch(0.916 0.023 87.4);
-  --secondary-foreground: oklch(0.198 0 0);
-  --muted: oklch(0.916 0.023 87.4);
-  --muted-foreground: oklch(0.47 0.01 75);
-  --accent: oklch(0.702 0.205 34.4);
-  --accent-foreground: oklch(0.955 0.017 89.1);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(0.198 0 0 / 14%);
-  --input: oklch(0.198 0 0 / 18%);
-  --ring: oklch(0.702 0.205 34.4);
-  --coral: oklch(0.702 0.205 34.4);
-  --coral-foreground: oklch(0.98 0.01 90);
-  --tech: oklch(0.795 0.162 153.5);
-  --surface: oklch(0.932 0.021 87.8);
-  --webgl-ink: rgb(23, 23, 23);
-  --webgl-paper: rgb(244, 241, 232);
-  --webgl-coral: rgb(255, 90, 54);
-  --webgl-tech: rgb(57, 217, 138);
-  --webgl-surface: rgb(232, 228, 216);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.984 0.003 247.858);
-  --sidebar-foreground: oklch(0.129 0.042 264.695);
-  --sidebar-primary: oklch(0.208 0.042 265.755);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.968 0.007 247.896);
-  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: oklch(0.704 0.04 256.788);
+
+  /* White #EFEEE8 */
+  --background: oklch(0.9482 0.0081 98.88);
+  /* Charcoal #3C0016 */
+  --foreground: oklch(0.2288 0.0918 5.93);
+  --charcoal: oklch(0.2288 0.0918 5.93);
+  --card: oklch(0.9482 0.0081 98.88);
+  --card-foreground: oklch(0.2288 0.0918 5.93);
+  --popover: oklch(0.9482 0.0081 98.88);
+  --popover-foreground: oklch(0.2288 0.0918 5.93);
+  --primary: oklch(0.2288 0.0918 5.93);
+  --primary-foreground: oklch(0.9482 0.0081 98.88);
+  --secondary: oklch(0.9124 0.0138 92.99);
+  --secondary-foreground: oklch(0.2288 0.0918 5.93);
+  --muted: oklch(0.9124 0.0138 92.99);
+  /* #7B5560 — 5.46:1 on white */
+  --muted-foreground: oklch(0.4938 0.0527 0.25);
+  /* Red #F92424 */
+  --accent: oklch(0.6285 0.2413 27.86);
+  --accent-foreground: oklch(0.9482 0.0081 98.88);
+  --destructive: oklch(0.6285 0.2413 27.86);
+  --destructive-foreground: oklch(0.9482 0.0081 98.88);
+  --border: oklch(0.2288 0.0918 5.93 / 16%);
+  --input: oklch(0.2288 0.0918 5.93 / 22%);
+  --ring: oklch(0.6285 0.2413 27.86);
+
+  /* Brand roles. --coral and --tech keep their names from the original build;
+     they now carry the red and the peach of this palette. */
+  --coral: oklch(0.6285 0.2413 27.86);
+  --coral-foreground: oklch(0.2288 0.0918 5.93);
+  /* Peach #D1C0A5 */
+  --tech: oklch(0.8149 0.0414 79.42);
+  --surface: oklch(0.9124 0.0138 92.99);
+  /* Foreground pair for charcoal and red sections. */
+  --on-dark: oklch(0.9482 0.0081 98.88);
+  /* #A89478 — 5.96:1 on charcoal */
+  --muted-on-dark: oklch(0.6770 0.0460 76.10);
+  /* #2A0010 — 4.80:1 on red, so small text on the contact section passes AA.
+     The charcoal itself only reaches 4.41:1 there. */
+  --ink-deep: oklch(0.1841 0.0744 1.80);
+
+  /* rgb mirrors: WebGL reads these, it cannot parse oklch. */
+  --webgl-ink: rgb(60, 0, 22);
+  --webgl-paper: rgb(239, 238, 232);
+  --webgl-red: rgb(249, 36, 36);
+  --webgl-peach: rgb(209, 192, 165);
+  --webgl-surface: rgb(229, 226, 216);
+  /* Each tone's own shadow — the ambient field shades within a tone, never
+     toward another tone's colour. */
+  --webgl-paper-shade: rgb(222, 216, 198);
+  --webgl-ink-shade: rgb(42, 0, 16);
+  --webgl-red-shade: rgb(178, 18, 26);
+  /* Retained for the printer scene, which reads these two by their old names. */
+  --webgl-coral: rgb(249, 36, 36);
+  --webgl-tech: rgb(209, 192, 165);
+
+  --chart-1: oklch(0.6285 0.2413 27.86);
+  --chart-2: oklch(0.8149 0.0414 79.42);
+  --chart-3: oklch(0.3440 0.1284 9.55);
+  --chart-4: oklch(0.7388 0.0435 80.22);
+  --chart-5: oklch(0.2815 0.1129 6.55);
+  --sidebar: oklch(0.9482 0.0081 98.88);
+  --sidebar-foreground: oklch(0.2288 0.0918 5.93);
+  --sidebar-primary: oklch(0.2288 0.0918 5.93);
+  --sidebar-primary-foreground: oklch(0.9482 0.0081 98.88);
+  --sidebar-accent: oklch(0.9124 0.0138 92.99);
+  --sidebar-accent-foreground: oklch(0.2288 0.0918 5.93);
+  --sidebar-border: oklch(0.2288 0.0918 5.93 / 16%);
+  --sidebar-ring: oklch(0.6285 0.2413 27.86);
 }
 
 .dark {
-  --background: oklch(0.129 0.042 264.695);
-  --foreground: oklch(0.984 0.003 247.858);
-  --card: oklch(0.208 0.042 265.755);
-  --card-foreground: oklch(0.984 0.003 247.858);
-  --popover: oklch(0.208 0.042 265.755);
-  --popover-foreground: oklch(0.984 0.003 247.858);
-  --primary: oklch(0.929 0.013 255.508);
-  --primary-foreground: oklch(0.208 0.042 265.755);
-  --secondary: oklch(0.279 0.041 260.031);
-  --secondary-foreground: oklch(0.984 0.003 247.858);
-  --muted: oklch(0.279 0.041 260.031);
-  --muted-foreground: oklch(0.704 0.04 256.788);
-  --accent: oklch(0.279 0.041 260.031);
-  --accent-foreground: oklch(0.984 0.003 247.858);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.984 0.003 247.858);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.551 0.027 264.364);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.208 0.042 265.755);
-  --sidebar-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-accent: oklch(0.279 0.041 260.031);
-  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.551 0.027 264.364);
+  --background: oklch(0.2288 0.0918 5.93);
+  --foreground: oklch(0.9482 0.0081 98.88);
+  --card: oklch(0.2815 0.1129 6.55);
+  --card-foreground: oklch(0.9482 0.0081 98.88);
+  --popover: oklch(0.2815 0.1129 6.55);
+  --popover-foreground: oklch(0.9482 0.0081 98.88);
+  --primary: oklch(0.9482 0.0081 98.88);
+  --primary-foreground: oklch(0.2288 0.0918 5.93);
+  --secondary: oklch(0.2815 0.1129 6.55);
+  --secondary-foreground: oklch(0.9482 0.0081 98.88);
+  --muted: oklch(0.2815 0.1129 6.55);
+  --muted-foreground: oklch(0.6770 0.0460 76.10);
+  --accent: oklch(0.6285 0.2413 27.86);
+  --accent-foreground: oklch(0.9482 0.0081 98.88);
+  --destructive: oklch(0.6285 0.2413 27.86);
+  --destructive-foreground: oklch(0.9482 0.0081 98.88);
+  --border: oklch(0.9482 0.0081 98.88 / 14%);
+  --input: oklch(0.9482 0.0081 98.88 / 20%);
+  --ring: oklch(0.6285 0.2413 27.86);
+  --surface: oklch(0.2815 0.1129 6.55);
+  --sidebar: oklch(0.2288 0.0918 5.93);
+  --sidebar-foreground: oklch(0.9482 0.0081 98.88);
+  --sidebar-primary: oklch(0.6285 0.2413 27.86);
+  --sidebar-primary-foreground: oklch(0.9482 0.0081 98.88);
+  --sidebar-accent: oklch(0.2815 0.1129 6.55);
+  --sidebar-accent-foreground: oklch(0.9482 0.0081 98.88);
+  --sidebar-border: oklch(0.9482 0.0081 98.88 / 14%);
+  --sidebar-ring: oklch(0.6285 0.2413 27.86);
 }
 
 @layer base {
@@ -157,24 +193,183 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     letter-spacing: 0;
-    scroll-behavior: smooth;
   }
 
   h1, h2, h3, p { letter-spacing: 0; }
 
-  ::selection { background: color-mix(in oklab, var(--coral) 28%, transparent); }
+  ::selection { background: color-mix(in oklab, var(--coral) 32%, transparent); }
 }
 
-.process-scene {
-  background-image:
-    linear-gradient(to right, color-mix(in oklab, var(--foreground) 5%, transparent) 1px, transparent 1px),
-    linear-gradient(to bottom, color-mix(in oklab, var(--foreground) 5%, transparent) 1px, transparent 1px);
-  background-size: 48px 48px;
+/* ---------------------------------------------------------------- ambient */
+
+/*
+ * The shader canvas sits behind the whole document. When it is live, sections
+ * hand their colour to it (`[data-tone]`) and drop their own background, so one
+ * continuous field runs the height of the page. Without WebGL the class is
+ * never added and the CSS colours below stay in charge.
+ */
+.ambient-field {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
 }
 
-.process-scene canvas { display: block; }
+.ambient-field canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
 
-.kinetic-hero { --hero-progress: 0; background-color: var(--background); }
+.page-shell { position: relative; z-index: 1; }
+
+.tone-paper { background-color: var(--background); }
+.tone-charcoal { background-color: var(--charcoal); color: var(--on-dark); }
+.tone-red { background-color: var(--coral); color: var(--coral-foreground); }
+
+html.webgl-bg .tone-paper,
+html.webgl-bg .tone-charcoal,
+html.webgl-bg .tone-red,
+html.webgl-bg .process-scene { background-color: transparent; }
+
+/* ----------------------------------------------------------------- splash */
+
+html[data-splash="skip"] .splash { display: none; }
+
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(1.5rem, 5vw, 3.5rem);
+  color: var(--on-dark);
+  overflow: hidden;
+}
+
+/* The panel is built from layers so it can peel off like a finished print. */
+.splash-peel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  z-index: -1;
+}
+
+.splash-peel span {
+  flex: 1;
+  background: var(--charcoal);
+  transform-origin: top center;
+  will-change: transform;
+}
+
+/* One flat panel at rest — the layers only become legible as they peel. */
+.splash-peel span + span { box-shadow: 0 -1px 0 color-mix(in oklab, var(--on-dark) 7%, transparent); }
+
+.splash-inner {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.splash-wordmark {
+  display: flex;
+  font-size: clamp(3.5rem, 15vw, 12rem);
+  font-weight: 800;
+  line-height: 0.85;
+  letter-spacing: -0.02em;
+}
+
+.splash-wordmark span { display: block; opacity: 0; }
+.splash-wordmark span:nth-child(3) { color: var(--coral); }
+
+.splash-tagline {
+  margin-top: 1.25rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: var(--tech);
+}
+
+.splash-progress { width: 100%; }
+
+.splash-progress-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted-on-dark);
+}
+
+.splash-progress-row > span:last-child {
+  font-size: clamp(1.75rem, 6vw, 3.5rem);
+  letter-spacing: -0.02em;
+  color: var(--on-dark);
+}
+
+.splash-bar {
+  display: block;
+  margin-top: 1rem;
+  height: 2px;
+  width: 100%;
+  background: color-mix(in oklab, var(--on-dark) 22%, transparent);
+  overflow: hidden;
+}
+
+.splash-bar > span {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--coral);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+/* ----------------------------------------------------------------- header */
+
+.site-header {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  z-index: 50;
+  transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease;
+  border-bottom: 1px solid transparent;
+}
+
+/* Over the dark hero the bar disappears; past it, it becomes a solid rule. */
+/* Transparent over the hero, but the headline scrolls right under the nav —
+   a short scrim keeps the links readable without reintroducing a bar. */
+.site-header[data-header="top"] {
+  color: var(--on-dark);
+  background-color: transparent;
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in oklab, var(--charcoal) 78%, transparent),
+    transparent
+  );
+}
+.site-header[data-header="top"] .header-cta { background: var(--coral); color: var(--on-dark); }
+.site-header[data-header="pinned"] {
+  color: var(--foreground);
+  background-color: color-mix(in oklab, var(--background) 82%, transparent);
+  border-bottom-color: var(--border);
+  backdrop-filter: blur(12px);
+}
+.site-header[data-header="pinned"] .header-cta { background: var(--foreground); color: var(--background); }
+.site-header .header-nav a { color: color-mix(in oklab, currentColor 68%, transparent); }
+.site-header .header-nav a:hover { color: currentColor; }
+
+/* ------------------------------------------------------------------- hero */
+
+.kinetic-hero { --hero-progress: 0; color: var(--on-dark); }
 .hero-line { display: block; overflow: hidden; padding-block: 0.04em; }
 .hero-line > span { display: block; opacity: 0; }
 .hero-line em { color: var(--coral); font-style: normal; }
@@ -182,6 +377,9 @@
 .hero-copy { transform: translateY(calc(var(--hero-progress) * -10vh)); }
 .hero-copy > p,
 .hero-copy > div { opacity: 0; }
+.hero-lede { color: var(--tech); }
+.hero-eyebrow { color: var(--muted-on-dark); }
+
 .hero-macro {
   position: absolute;
   inset: auto 7vw 6vh auto;
@@ -189,23 +387,42 @@
   aspect-ratio: 4 / 5;
   overflow: hidden;
   transform: translate3d(calc(var(--hero-progress) * 22vw), calc(var(--hero-progress) * 18vh), 0) rotate(calc(var(--hero-progress) * 10deg));
-  opacity: calc(0.46 - var(--hero-progress) * 0.38);
-  mix-blend-mode: multiply;
+  opacity: calc(0.5 - var(--hero-progress) * 0.42);
+  mix-blend-mode: screen;
 }
-.hero-macro img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) contrast(1.2); }
-.hero-index { position: absolute; right: 2rem; bottom: 1.5rem; text-align: right; }
+
+.hero-macro img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) contrast(1.35) brightness(0.9); }
+.hero-index { position: absolute; right: 2rem; bottom: 1.5rem; text-align: right; color: var(--muted-on-dark); }
 .hero-scroll-link { border-bottom: 1px solid currentColor; padding-bottom: 0.4rem; }
+
+/*
+ * Modular blocks that assemble behind the headline. They read as outlines with
+ * a few filled cells — solid saturated tiles directly under display type made
+ * the headline hard to read.
+ */
 .layer-assembly {
   position: absolute;
-  left: -7vw;
-  top: 18vh;
-  width: min(44vw, 620px);
-  height: min(44vw, 620px);
+  left: -14vw;
+  top: 14vh;
+  width: min(42vw, 580px);
+  height: min(42vw, 580px);
+  opacity: 0.85;
   transform: translate3d(calc(var(--hero-progress) * -28vw), calc(var(--hero-progress) * 10vh), 0) rotate(calc(-8deg + var(--hero-progress) * -18deg));
 }
-.layer-assembly i { position: absolute; display: block; width: 18%; aspect-ratio: 1; background: var(--tech); border: 1px solid var(--foreground); opacity: 0; }
-.layer-assembly i:nth-child(3n) { background: var(--coral); }
-.layer-assembly i:nth-child(4n) { background: var(--foreground); }
+
+.layer-assembly i {
+  position: absolute;
+  display: block;
+  width: 18%;
+  aspect-ratio: 1;
+  background: transparent;
+  border: 1px solid color-mix(in oklab, var(--tech) 42%, transparent);
+  opacity: 0;
+}
+
+.layer-assembly i:nth-child(3n) { background: color-mix(in oklab, var(--coral) 26%, transparent); border-color: color-mix(in oklab, var(--coral) 55%, transparent); }
+.layer-assembly i:nth-child(4n) { background: color-mix(in oklab, var(--tech) 16%, transparent); }
+.layer-assembly i:nth-child(7n) { background: color-mix(in oklab, var(--on-dark) 10%, transparent); }
 .layer-assembly i:nth-child(1) { left: 18%; top: 0; } .layer-assembly i:nth-child(2) { left: 36%; top: 0; }
 .layer-assembly i:nth-child(3) { left: 54%; top: 0; } .layer-assembly i:nth-child(4) { left: 0; top: 18%; }
 .layer-assembly i:nth-child(5) { left: 18%; top: 18%; } .layer-assembly i:nth-child(6) { left: 54%; top: 18%; }
@@ -218,23 +435,69 @@
 .layer-assembly i:nth-child(19) { left: 90%; top: 36%; } .layer-assembly i:nth-child(20) { left: 36%; top: 90%; }
 .layer-assembly i:nth-child(21) { left: 72%; top: 90%; } .layer-assembly i:nth-child(22) { left: 90%; top: 72%; }
 
+/* ---------------------------------------------------------------- process */
+
+.process-scene {
+  background-color: var(--surface);
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--foreground) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--foreground) 6%, transparent) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+.process-scene canvas { display: block; }
+
+/*
+ * Red is a 3.4:1 colour on white — fine for display type and fills, not for the
+ * 10px mono labels. Those use it darkened into the charcoal, which keeps the
+ * accent reading as red at 10.6:1.
+ */
+.label-accent { color: color-mix(in oklab, var(--coral) 55%, var(--charcoal)); }
+
+/* --------------------------------------------------------------- services */
+
 [data-reveal-line] { opacity: 0; }
+
+/*
+ * --scrub runs -1 → 1 as an element crosses the viewport, written once per
+ * frame by KineticMotion. It connects the sections to each other: elements are
+ * already in motion before they are read, and keep moving after.
+ */
+[data-scrub] { --scrub: 0; }
 .services-heading h2 span { color: var(--tech); }
-.service-sequence { border-top: 1px solid color-mix(in oklab, var(--background) 20%, transparent); }
-.kinetic-service { position: relative; display: grid; min-height: 72svh; grid-template-columns: 0.8fr 1.2fr; align-items: center; border-bottom: 1px solid color-mix(in oklab, var(--background) 20%, transparent); overflow: hidden; }
-.service-number { font-size: clamp(10rem, 28vw, 28rem); font-weight: 800; line-height: 0.7; opacity: 0.08; transform: translateX(-8%); }
-.service-content { position: relative; z-index: 1; padding: 4rem 0; }
+.service-sequence { border-top: 1px solid color-mix(in oklab, var(--on-dark) 20%, transparent); }
+.kinetic-service { position: relative; display: grid; min-height: 72svh; grid-template-columns: 0.8fr 1.2fr; align-items: center; border-bottom: 1px solid color-mix(in oklab, var(--on-dark) 20%, transparent); overflow: hidden; }
+.service-number {
+  font-size: clamp(10rem, 28vw, 28rem);
+  font-weight: 800;
+  line-height: 0.7;
+  opacity: 0.1;
+  transform: translate3d(calc(-8% + var(--scrub) * -5%), calc(var(--scrub) * 26%), 0);
+  will-change: transform;
+}
+.service-content {
+  position: relative;
+  z-index: 1;
+  padding: 4rem 0;
+  transform: translate3d(0, calc(var(--scrub) * -4%), 0);
+}
 .service-content h3 { margin-top: 1.25rem; font-size: clamp(3rem, 7vw, 6.5rem); font-weight: 800; line-height: 0.86; }
-.service-content p { margin-top: 2rem; max-width: 42ch; font-size: 1.1rem; line-height: 1.65; opacity: 0.62; }
+.service-content p { margin-top: 2rem; max-width: 42ch; font-size: 1.1rem; line-height: 1.65; color: var(--muted-on-dark); }
 .service-tags { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 2rem; font-family: var(--font-mono); font-size: 0.625rem; text-transform: uppercase; }
 .service-tags span { border: 1px solid currentColor; border-radius: 999px; padding: 0.4rem 0.75rem; }
 .kinetic-service-coral h3 { color: var(--coral); }
 .kinetic-service-tech { direction: rtl; }
 .kinetic-service-tech > * { direction: ltr; }
 .kinetic-service-tech h3 { color: var(--tech); }
-.kinetic-contact h2 span { color: var(--foreground); }
+
+/* ---------------------------------------------------------------- contact */
+
+.kinetic-contact h2 span { color: var(--on-dark); }
+.contact-title { transform: translate3d(calc(var(--scrub) * -4vw), 0, 0); will-change: transform; }
 .contact-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 2rem; }
 .contact-link { border-bottom: 2px solid currentColor; padding-bottom: 0.4rem; }
+/* Small type on red needs the deeper ink to clear AA; see --ink-deep. */
+.contact-meta { color: var(--ink-deep); }
 
 @keyframes rise {
   from { opacity: 0; transform: translateY(24px); }
@@ -245,22 +508,23 @@
 .animate-rise-delayed { animation: rise 1.1s cubic-bezier(0.32, 0.72, 0, 1) 0.12s both; }
 
 @media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
   .phase-copy { opacity: 1 !important; }
-  [data-kinetic-word], [data-module], [data-reveal-line] { opacity: 1 !important; transform: none !important; }
+  [data-kinetic-word], [data-module], [data-reveal-line], .hero-line > span,
+  .hero-copy > p, .hero-copy > div { opacity: 1 !important; transform: none !important; }
   .hero-copy, .hero-macro, .layer-assembly { transform: none !important; }
+  .service-number, .service-content, .contact-title { transform: none !important; }
 }
 
 @media (max-width: 767px) {
   .kinetic-hero { min-height: 135svh; }
   .hero-copy { justify-content: flex-end; padding-bottom: 14vh; }
   .hero-line-shift { padding-left: 7vw; }
-  .layer-assembly { left: -22vw; top: 12vh; width: 80vw; height: 80vw; opacity: 0.7; }
+  .layer-assembly { left: -26vw; top: 10vh; width: 78vw; height: 78vw; opacity: 0.6; }
   .hero-macro { right: -4vw; bottom: 30vh; width: 42vw; }
   .hero-copy > div { align-items: flex-start; flex-direction: column; }
   .hero-index { right: 1.25rem; bottom: 1rem; }
@@ -270,4 +534,5 @@
   .kinetic-service-tech { direction: ltr; }
   .contact-row { align-items: flex-start; flex-direction: column; }
   .contact-link { font-size: 1rem; }
+  .splash-wordmark { font-size: clamp(3rem, 18vw, 6rem); }
 }

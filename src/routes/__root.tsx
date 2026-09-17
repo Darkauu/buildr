@@ -90,7 +90,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&family=JetBrains+Mono:wght@400;500&display=swap" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&family=JetBrains+Mono:wght@400;500&display=swap",
+      },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
     ],
   }),
@@ -100,11 +103,23 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   errorComponent: ErrorComponent,
 });
 
+/**
+ * Runs before first paint. The splash is server-rendered so the first frame is
+ * never a hero with invisible text, which means the cases that must NOT see it
+ * — a repeat view in the same session, and reduced motion — have to be marked
+ * on <html> before the browser paints. Doing it in an effect would flash.
+ */
+const SPLASH_SKIP_SCRIPT = `try{if(sessionStorage.getItem('strata:splash-shown')==='1'||matchMedia('(prefers-reduced-motion: reduce)').matches){document.documentElement.dataset.splash='skip'}}catch(e){}`;
+
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: the inline script below sets data-splash on
+    // <html> before React hydrates, which is the whole point of it running
+    // pre-paint. Without this, React reports the attribute as a mismatch.
+    <html lang="es" suppressHydrationWarning>
       <head>
         <HeadContent />
+        <script dangerouslySetInnerHTML={{ __html: SPLASH_SKIP_SCRIPT }} />
       </head>
       <body>
         {children}

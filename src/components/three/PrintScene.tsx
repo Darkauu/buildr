@@ -3,7 +3,7 @@ import { useGLTF } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import * as THREE from "three";
-import printerAsset from "@/assets/creality-ender-3-pro.glb.asset.json";
+import { printerModelUrl } from "@/lib/assets";
 
 type Palette = {
   ink: string;
@@ -19,7 +19,7 @@ type PrintSceneProps = {
   reducedMotion: boolean;
 };
 
-const MODEL_URL = printerAsset.url;
+const MODEL_URL = printerModelUrl;
 const TARGET_HEIGHT = 5.4;
 const LAYER_COUNT = 32;
 const PRINTER_OFFSET = new THREE.Vector3(-1.05, -0.15, 0);
