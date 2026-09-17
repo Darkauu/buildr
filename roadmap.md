@@ -12,3 +12,9 @@
 - [x] Incorporar dirección cinética inspirada en SPARKK fuera de la impresora
 - [x] Coreografiar portada, servicios y contacto con anime.js
 - [ ] Validar la nueva experiencia en escritorio y móvil
+
+- [x] Reemplazar la paleta por carbón #3C0016, rojo #F92424, durazno #D1C0A5 y blanco #EFEEE8
+- [x] Añadir pantalla de carga real sobre fuentes, fotografía y modelo de impresora
+- [x] Construir fondo WebGL continuo con bandas por sección y respaldo CSS
+- [x] Unificar el scroll en un solo motor con inercia y reparto de fotogramas
+- [ ] Revisar la nueva dirección en dispositivos reales y ajustar intensidad del fondo

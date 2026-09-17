@@ -1,5 +1,6 @@
 import { animate } from "animejs";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { subscribeScroll } from "@/lib/scroll";
 import { phases } from "./print-phases";
 
 const PrintCanvas = lazy(() => import("./three/PrintCanvas"));
@@ -23,10 +24,10 @@ export function PrintProcess() {
     motionQuery.addEventListener("change", handleMotionChange);
 
     const phaseNodes = Array.from(section.querySelectorAll<HTMLElement>("[data-phase]"));
-    let frame = 0;
-    const updatePhase = () => {
-      frame = 0;
-      const line = window.innerHeight * 0.55;
+    // Driven by the shared scroll engine so the phase change lands on the same
+    // frame as the hero parallax and the ambient background.
+    const unsubscribe = subscribeScroll(({ viewport }) => {
+      const line = viewport * 0.55;
       let best = 0;
       let bestDistance = Number.POSITIVE_INFINITY;
       phaseNodes.forEach((node, index) => {
@@ -38,14 +39,7 @@ export function PrintProcess() {
         }
       });
       setActivePhase(best);
-    };
-    const handleScroll = () => {
-      if (frame) return;
-      frame = window.requestAnimationFrame(updatePhase);
-    };
-    window.addEventListener("scroll", handleScroll, { passive: true });
-    window.addEventListener("resize", handleScroll);
-    updatePhase();
+    });
 
     const visibilityObserver = new IntersectionObserver(
       ([entry]) => setIsVisible(entry?.isIntersecting ?? false),
@@ -64,9 +58,7 @@ export function PrintProcess() {
     }
 
     return () => {
-      window.removeEventListener("scroll", handleScroll);
-      window.removeEventListener("resize", handleScroll);
-      if (frame) window.cancelAnimationFrame(frame);
+      unsubscribe();
       visibilityObserver.disconnect();
       motionQuery.removeEventListener("change", handleMotionChange);
     };
@@ -74,7 +66,9 @@ export function PrintProcess() {
 
   useEffect(() => {
     if (reducedMotion) return;
-    const activeCopy = sectionRef.current?.querySelector<HTMLElement>(`[data-phase="${activePhase}"] [data-copy]`);
+    const activeCopy = sectionRef.current?.querySelector<HTMLElement>(
+      `[data-phase="${activePhase}"] [data-copy]`,
+    );
     if (!activeCopy) return;
     animate(activeCopy, {
       opacity: [0.45, 1],
@@ -85,11 +79,16 @@ export function PrintProcess() {
   }, [activePhase, reducedMotion]);
 
   return (
-    <section ref={sectionRef} id="proceso" className="border-b border-border bg-background">
+    <section
+      ref={sectionRef}
+      id="proceso"
+      data-tone="paper"
+      className="tone-paper border-b border-border"
+    >
       <div className="mx-auto max-w-[1400px] px-5 py-20 sm:px-8 lg:py-28">
         <div className="mb-12 flex items-end justify-between border-b border-border pb-5">
           <div>
-            <p className="font-mono text-[11px] uppercase text-coral">Proceso / Procedural</p>
+            <p className="label-accent font-mono text-[11px] uppercase">Proceso / Procedural</p>
             <h2 className="mt-3 text-4xl font-extrabold sm:text-5xl">El recorrido</h2>
           </div>
           <span className="hidden font-mono text-[11px] uppercase text-muted-foreground sm:block">
@@ -98,17 +97,25 @@ export function PrintProcess() {
         </div>
 
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1.35fr)_minmax(320px,.65fr)] lg:gap-16">
-          <div ref={visualRef} className="top-20 h-fit lg:sticky" aria-label={`Vista 3D del proceso: ${phases[activePhase]?.title ?? "ajuste de impresora"}`}>
-            <div className="process-scene relative h-[52svh] min-h-[360px] overflow-hidden border-y border-border bg-surface sm:h-[64svh] lg:h-[calc(100svh-9rem)] lg:max-h-[760px]">
+          <div
+            ref={visualRef}
+            className="sticky top-16 h-fit lg:top-20"
+            aria-label={`Vista 3D del proceso: ${phases[activePhase]?.title ?? "ajuste de impresora"}`}
+          >
+            <div className="process-scene relative h-[52svh] min-h-[360px] overflow-hidden border-y border-border sm:h-[64svh] lg:h-[calc(100svh-9rem)] lg:max-h-[760px]">
               <div className="pointer-events-none absolute left-4 top-4 z-10 font-mono text-[10px] uppercase text-muted-foreground sm:left-6 sm:top-6">
                 STRATA / flujo físico-digital
               </div>
-              <div className="pointer-events-none absolute right-4 top-4 z-10 text-right font-mono text-[10px] uppercase text-coral sm:right-6 sm:top-6">
+              <div className="label-accent pointer-events-none absolute right-4 top-4 z-10 text-right font-mono text-[10px] uppercase sm:right-6 sm:top-6">
                 {phases[activePhase]?.label ?? "Tune up / activo"}
               </div>
               {isMounted ? (
                 <Suspense fallback={<div className="h-full w-full animate-pulse bg-surface" />}>
-                  <PrintCanvas phase={activePhase} isVisible={isVisible} reducedMotion={reducedMotion} />
+                  <PrintCanvas
+                    phase={activePhase}
+                    isVisible={isVisible}
+                    reducedMotion={reducedMotion}
+                  />
                 </Suspense>
               ) : null}
               <div className="pointer-events-none absolute bottom-4 left-4 right-4 z-10 flex items-center justify-between font-mono text-[10px] uppercase text-muted-foreground sm:bottom-6 sm:left-6 sm:right-6">
@@ -118,7 +125,7 @@ export function PrintProcess() {
             </div>
           </div>
 
-          <ol>
+          <ol className="pb-[32vh]">
             {phases.map((phase, index) => (
               <li
                 key={phase.number}
@@ -129,7 +136,7 @@ export function PrintProcess() {
               >
                 <div data-copy>
                   <div className="mb-8 flex items-center justify-between font-mono text-xs">
-                    <span className="text-coral">{phase.number}</span>
+                    <span className="label-accent">{phase.number}</span>
                     <span className="uppercase text-muted-foreground">{phase.label}</span>
                   </div>
                   <h3 className="text-4xl font-bold sm:text-5xl">{phase.title}</h3>
