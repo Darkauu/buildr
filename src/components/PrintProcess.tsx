@@ -67,7 +67,7 @@ export function PrintProcess() {
   // The cube field reads this to spell out whichever phase is on screen.
   useEffect(() => {
     const section = sectionRef.current;
-    if (section) section.dataset["phaseTitle"] = phases[activePhase]?.title ?? "Proceso";
+    if (section) section.dataset["cubeWord"] = phases[activePhase]?.cubeWord ?? "Proceso";
   }, [activePhase]);
 
   useEffect(() => {

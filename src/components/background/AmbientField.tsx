@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { subscribeScroll } from "@/lib/scroll";
 import { ambientFragmentShader, ambientVertexShader } from "./ambient-shaders";
 import { CUBE_COUNT, CubeField } from "./CubeField";
-import { heroFormation, textFormation, type Formation } from "./cube-formations";
+import { cubeEdgeFormation, fitVoxelWord, heroFormation, type Formation } from "./cube-formations";
 
 /**
  * Site-wide ambient background.
@@ -105,67 +105,154 @@ function readCubePalette() {
     paper: read("--webgl-paper", "rgb(239, 238, 232)"),
     peach: read("--webgl-peach", "rgb(209, 192, 165)"),
     red: read("--webgl-red", "rgb(249, 36, 36)"),
+    ink: read("--webgl-ink", "rgb(60, 0, 22)"),
+    green: read("--webgl-voxel-green", "rgb(61, 255, 110)"),
   };
 }
 
+type CubePalette = ReturnType<typeof readCubePalette>;
+
+/**
+ * Keeps a shape of half-extent `halfSpan` fully inside a frame `halfWidth` wide.
+ *
+ * Formations are placed off to one side on a wide screen, where there is room
+ * beside the copy. On a narrow one there is no such room, so the intended
+ * offset is pulled back to whatever still fits — otherwise the shape sits
+ * outside the frustum and the section looks like it has no cubes at all.
+ */
+function withinFrame(offset: number, halfSpan: number, halfWidth: number) {
+  const limit = Math.max(0, halfWidth - halfSpan);
+  return THREE.MathUtils.clamp(offset, -limit, limit);
+}
+
+/** No cubes at all — the field parks every one of them out of sight. */
+const emptyFormation: Formation = {
+  points: [],
+  cell: 0.1,
+  presence: 0,
+  drift: 0,
+  spin: 0,
+  jitter: 0,
+};
+
+/** Half the horizontal extent of a set of points. */
+function halfSpanOf(points: { x: number }[]) {
+  return points.reduce((widest, point) => Math.max(widest, Math.abs(point.x)), 0);
+}
+
 /** Which shape the cubes hold, based on the section under the viewport centre. */
-function formationFor(section: HTMLElement | null): { key: string; formation: Formation } {
+function formationFor(
+  section: HTMLElement | null,
+  palette: CubePalette,
+  halfWidth: number,
+): { key: string; formation: Formation } {
   const id = section?.id ?? "inicio";
 
   if (id === "proceso") {
-    // PrintProcess writes the active phase title onto the section.
-    const title = (section?.dataset["phaseTitle"] ?? "Proceso").toUpperCase();
+    // PrintProcess writes the word for the active phase onto the section.
+    const word = section?.dataset["cubeWord"] ?? "Proceso";
+    const stacked = word.includes("\n");
+
+    // On a narrow frame the section is a single column of copy with the visual
+    // stuck to the top of it, and there is nowhere left for a word this size to
+    // sit that is not directly behind running text. It is dropped rather than
+    // shrunk: a voxel word small enough to fit between the paragraphs stops
+    // being legible as one.
+    if (halfWidth < 2.2) {
+      return { key: "proceso:none", formation: emptyFormation };
+    }
+
+    // One flat layer of solid green: the phase words are meant to read as
+    // retro screen pixels, so every cell is the same colour and depth.
+    //
+    // Presence stays at 1 here. It is applied as instance scale, and anything
+    // below 1 pulls the cubes back off each other — the lattice stops touching
+    // and the word falls apart into confetti. A voxel word has to be full size;
+    // it is kept out of the way by where it sits, not by how big it is.
+    const fitted = fitVoxelWord(word, CUBE_COUNT, {
+      // Narrow enough that even the longest word stays inside the visual
+      // column and never runs under the phase copy on the right — and never
+      // wider than the frame itself, which is what decides it on a phone.
+      width: Math.min(5.6, halfWidth * 1.8),
+      height: stacked ? 2.2 : 1.7,
+      centerColor: palette.green,
+      borderColor: palette.green,
+      centerDepth: 1,
+      borderDepth: 1,
+    });
     return {
-      key: `proceso:${title}`,
-      // Phase titles vary in length, so they get the widest grid of the three.
-      // Set well back and kept faint: the printer panel and the phase copy own
-      // this section, and the title is only a watermark behind them.
-      formation: textFormation(title, {
-        target: CUBE_COUNT,
-        maxColumns: 52,
-        width: 8.2,
-        height: 2,
-        depth: 0.5,
-        presence: 0.34,
-        offset: new THREE.Vector3(0, 0.1, -3),
-      }),
+      key: `proceso:${word}`,
+      formation: {
+        points: fitted.points,
+        cell: fitted.cell,
+        presence: 1,
+        drift: 0,
+        spin: 0,
+        jitter: 0,
+        // Never under the phase copy on the right. A single line lies along the
+        // foot of the visual, where only the printer's base crosses it; a
+        // stacked word is nearly square, so it goes out to the left margin
+        // instead, where the machine leaves the most room.
+        offset: new THREE.Vector3(
+          withinFrame(stacked ? -3.2 : -1.35, halfSpanOf(fitted.points), halfWidth),
+          stacked ? -0.15 : -1.6,
+          -2.6,
+        ),
+      },
     };
   }
+
   if (id === "servicios") {
+    // The twelve edges of a cube, turning on its own diagonal.
+    //
+    // Kept close to the section's own charcoal rather than paper white: the
+    // field is fixed while the services scroll past it, so this shape passes
+    // behind the headings as well as behind the frames, and a bright outline
+    // there would eat the type. Only the corners carry real colour, which is
+    // enough to follow the rotation.
     return {
       key: "servicios",
-      formation: textFormation("02", {
-        target: CUBE_COUNT,
-        maxColumns: 22,
-        width: 3.2,
-        height: 2.2,
-        depth: 0.6,
-        presence: 0.5,
-        // Right edge and deep, clear of the copy column.
-        offset: new THREE.Vector3(2.9, 0.15, -2.4),
+      formation: cubeEdgeFormation({
+        size: 1.9,
+        perEdge: 6,
+        color: palette.ink.clone().lerp(palette.peach, 0.5),
+        accent: palette.ink.clone().lerp(palette.red, 0.7),
+        presence: 0.7,
+        // 1.65 is the cube's half-diagonal, which is how far it reaches when
+        // it turns onto a vertex.
+        offset: new THREE.Vector3(withinFrame(2.95, 1.65, halfWidth), 0.35, -1.6),
       }),
     };
   }
+
   if (id === "contacto") {
-    // Sits to the right of "Tu idea. En físico." rather than behind it.
+    // Relief: the face of the word stands a cube proud of its own outline, so
+    // the white border reads as a bevel around the dark charcoal centre.
+    const fitted = fitVoxelWord("STRATA", CUBE_COUNT, {
+      width: Math.min(5, halfWidth * 1.8),
+      height: 1.05,
+      centerColor: palette.ink,
+      borderColor: palette.paper,
+      centerDepth: 2,
+      borderDepth: 1,
+    });
     return {
       key: "contacto",
-      // Coarse on purpose: chunky enough to read as pixel art rather than a
-      // crowd of little cubes.
-      formation: textFormation("STRATA", {
-        target: CUBE_COUNT,
-        maxColumns: 34,
-        width: 5.2,
-        height: 1.5,
-        depth: 0.18,
-        drift: 0.05,
-        // Below the closing line and to its right, in the empty band — not
-        // across it.
-        offset: new THREE.Vector3(1.75, -1.45, 0),
-      }),
+      formation: {
+        points: fitted.points,
+        cell: fitted.cell,
+        presence: 1,
+        drift: 0,
+        spin: 0,
+        jitter: 0,
+        // The empty band between the closing paragraph and the footer rule,
+        // pushed right of the two lines of small type that live in that corner.
+        offset: new THREE.Vector3(withinFrame(-0.54, halfSpanOf(fitted.points), halfWidth), -2, 0),
+      },
     };
   }
-  return { key: "hero", formation: heroFormation() };
+
+  return { key: "hero", formation: heroFormation(palette) };
 }
 
 export function AmbientField() {
@@ -198,7 +285,8 @@ export function AmbientField() {
 
     const tones = readTones();
     const fallbackTone = tones["paper"]!;
-    const cubes = new CubeField(readCubePalette());
+    const cubePalette = readCubePalette();
+    const cubes = new CubeField(heroFormation(cubePalette));
     // Two passes share the canvas, so clearing has to be explicit.
     renderer.autoClear = false;
 
@@ -240,13 +328,16 @@ export function AmbientField() {
     };
     resize();
 
+    // The page's sections are fixed for the life of the field, so the list is
+    // read once and shared by the two things that walk it every frame.
+    const sections = Array.from(document.querySelectorAll<HTMLElement>("[data-tone]"));
+
     /**
      * Rebuilds the band list from the sections currently crossing the viewport.
      * Edges are normalised 0..1 from the top of the viewport, matching the
      * shader's screen-space coordinate.
      */
     const syncBands = () => {
-      const sections = Array.from(document.querySelectorAll<HTMLElement>("[data-tone]"));
       const height = window.innerHeight;
       let count = 0;
 
@@ -282,15 +373,36 @@ export function AmbientField() {
     let last = performance.now();
     let scrollVelocity = 0;
 
+    /**
+     * Picks the formation for whatever section is under the middle of the
+     * viewport, every frame.
+     *
+     * It has to be every frame rather than on scroll alone: the active phase
+     * is React state, so the word it writes onto the section lands after the
+     * scroll that caused it. Driven by scroll events only, coming to rest on a
+     * phase boundary leaves the previous phase's word standing.
+     *
+     * Building a formation rasterises a word, which is far too much work to
+     * repeat sixty times a second, so the identity of the shape is checked
+     * first and the formation is only built when it actually changes.
+     */
+    let formationKey = "";
     const syncFormation = () => {
       const middle = window.innerHeight / 2;
       const section =
-        Array.from(document.querySelectorAll<HTMLElement>("[data-tone]")).find((node) => {
+        sections.find((node) => {
           const rect = node.getBoundingClientRect();
           return rect.top <= middle && rect.bottom >= middle;
         }) ?? null;
-      const { key, formation } = formationFor(section);
-      cubes.setFormation(key, formation);
+
+      // The frame width is part of the identity: a resize changes how much room
+      // a shape has, and with it the shape itself.
+      const halfWidth = cubes.halfWidth;
+      const key = `${section?.id ?? "inicio"}:${section?.dataset["cubeWord"] ?? ""}:${halfWidth.toFixed(1)}`;
+      if (key !== formationKey) {
+        formationKey = key;
+        cubes.setFormation(key, formationFor(section, cubePalette, halfWidth).formation);
+      }
       cubes.setInteractivity(section?.id === "contacto" ? 1 : 0);
     };
 
@@ -300,7 +412,6 @@ export function AmbientField() {
       uniforms.uVelocity.value = THREE.MathUtils.clamp(snapshot.velocity / 90, -1, 1);
       scrollVelocity = THREE.MathUtils.clamp(snapshot.velocity / 60, -1.5, 1.5);
       syncBands();
-      syncFormation();
     });
 
     const render = (now: number) => {
@@ -312,6 +423,7 @@ export function AmbientField() {
       const delta = Math.min(rawDelta / 1000, 0.05);
       elapsed += delta;
       uniforms.uTime.value = elapsed;
+      syncFormation();
 
       cubes.update(delta, scrollVelocity);
       renderer.clear();
