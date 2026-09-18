@@ -11,11 +11,16 @@
  * visitor behind a preloader.
  */
 
+/** Which asset the splash should name while it is still in flight. */
+export type BootStage = "fonts" | "image" | "model" | "done";
+
 export type BootState = {
   /** Weighted load progress, 0..1. */
   progress: number;
   /** True once every task settled, or the timeout fired. */
   ready: boolean;
+  /** The first unfinished task, so the splash can say what it is waiting on. */
+  stage: BootStage;
 };
 
 type BootTask = {
@@ -31,8 +36,11 @@ const tasks: Record<string, BootTask> = {
   model: { weight: 0.7, progress: 0 },
 };
 
+/** Reported in this order, so the splash reads as a sequence rather than a jumble. */
+const STAGE_ORDER: BootStage[] = ["fonts", "image", "model"];
+
 const subscribers = new Set<(state: BootState) => void>();
-let state: BootState = { progress: 0, ready: false };
+let state: BootState = { progress: 0, ready: false, stage: "fonts" };
 let started = false;
 let timeout: ReturnType<typeof setTimeout> | undefined;
 
@@ -42,7 +50,8 @@ function publish() {
     0,
   );
   const ready = state.ready || progress >= 0.999;
-  state = { progress: Math.min(1, progress), ready };
+  const pending = STAGE_ORDER.find((name) => (tasks[name]?.progress ?? 1) < 1);
+  state = { progress: Math.min(1, progress), ready, stage: ready ? "done" : (pending ?? "done") };
   subscribers.forEach((subscriber) => subscriber(state));
   if (ready && timeout) {
     clearTimeout(timeout);
@@ -106,7 +115,7 @@ export function startBoot(assets: { modelUrl: string; imageUrl: string }) {
   started = true;
 
   timeout = setTimeout(() => {
-    state = { progress: 1, ready: true };
+    state = { progress: 1, ready: true, stage: "done" };
     subscribers.forEach((subscriber) => subscriber(state));
   }, TIMEOUT_MS);
 

@@ -314,6 +314,8 @@ html[data-splash="skip"] .splash { display: none; }
   color: var(--on-dark);
 }
 
+.splash-stage { color: var(--tech); }
+
 .splash-bar {
   display: block;
   margin-top: 1rem;
@@ -380,60 +382,42 @@ html[data-splash="skip"] .splash { display: none; }
 .hero-lede { color: var(--tech); }
 .hero-eyebrow { color: var(--muted-on-dark); }
 
+/*
+ * The hero photograph, cut into horizontal slices.
+ *
+ * Each slice shows one band of the same image (background-size is the layer
+ * count, background-position picks the band) and slides further as the hero
+ * scrolls, so the picture comes apart in layers and leaves the screen.
+ */
 .hero-macro {
   position: absolute;
   inset: auto 7vw 6vh auto;
+  display: flex;
   width: min(26vw, 360px);
+  flex-direction: column;
   aspect-ratio: 4 / 5;
-  overflow: hidden;
-  transform: translate3d(calc(var(--hero-progress) * 22vw), calc(var(--hero-progress) * 18vh), 0) rotate(calc(var(--hero-progress) * 10deg));
-  opacity: calc(0.5 - var(--hero-progress) * 0.42);
+  opacity: calc(0.66 - var(--hero-progress) * 0.56);
   mix-blend-mode: screen;
 }
 
-.hero-macro img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) contrast(1.35) brightness(0.9); }
+.hero-macro span {
+  display: block;
+  flex: 1 1 0;
+  background-image: var(--hero-macro);
+  background-repeat: no-repeat;
+  background-size: 100% calc(var(--hero-layers) * 100%);
+  background-position: 50% var(--layer-y);
+  filter: grayscale(1) contrast(1.35) brightness(0.92);
+  transform: translate3d(
+    calc(var(--hero-progress) * var(--layer) * 14vw),
+    calc(var(--hero-progress) * var(--layer) * 1.1vh),
+    0
+  );
+  will-change: transform;
+}
+
 .hero-index { position: absolute; right: 2rem; bottom: 1.5rem; text-align: right; color: var(--muted-on-dark); }
 .hero-scroll-link { border-bottom: 1px solid currentColor; padding-bottom: 0.4rem; }
-
-/*
- * Modular blocks that assemble behind the headline. They read as outlines with
- * a few filled cells — solid saturated tiles directly under display type made
- * the headline hard to read.
- */
-.layer-assembly {
-  position: absolute;
-  left: -14vw;
-  top: 14vh;
-  width: min(42vw, 580px);
-  height: min(42vw, 580px);
-  opacity: 0.85;
-  transform: translate3d(calc(var(--hero-progress) * -28vw), calc(var(--hero-progress) * 10vh), 0) rotate(calc(-8deg + var(--hero-progress) * -18deg));
-}
-
-.layer-assembly i {
-  position: absolute;
-  display: block;
-  width: 18%;
-  aspect-ratio: 1;
-  background: transparent;
-  border: 1px solid color-mix(in oklab, var(--tech) 42%, transparent);
-  opacity: 0;
-}
-
-.layer-assembly i:nth-child(3n) { background: color-mix(in oklab, var(--coral) 26%, transparent); border-color: color-mix(in oklab, var(--coral) 55%, transparent); }
-.layer-assembly i:nth-child(4n) { background: color-mix(in oklab, var(--tech) 16%, transparent); }
-.layer-assembly i:nth-child(7n) { background: color-mix(in oklab, var(--on-dark) 10%, transparent); }
-.layer-assembly i:nth-child(1) { left: 18%; top: 0; } .layer-assembly i:nth-child(2) { left: 36%; top: 0; }
-.layer-assembly i:nth-child(3) { left: 54%; top: 0; } .layer-assembly i:nth-child(4) { left: 0; top: 18%; }
-.layer-assembly i:nth-child(5) { left: 18%; top: 18%; } .layer-assembly i:nth-child(6) { left: 54%; top: 18%; }
-.layer-assembly i:nth-child(7) { left: 72%; top: 18%; } .layer-assembly i:nth-child(8) { left: 0; top: 36%; }
-.layer-assembly i:nth-child(9) { left: 36%; top: 36%; } .layer-assembly i:nth-child(10) { left: 54%; top: 36%; }
-.layer-assembly i:nth-child(11) { left: 18%; top: 54%; } .layer-assembly i:nth-child(12) { left: 36%; top: 54%; }
-.layer-assembly i:nth-child(13) { left: 54%; top: 54%; } .layer-assembly i:nth-child(14) { left: 72%; top: 54%; }
-.layer-assembly i:nth-child(15) { left: 0; top: 72%; } .layer-assembly i:nth-child(16) { left: 18%; top: 72%; }
-.layer-assembly i:nth-child(17) { left: 54%; top: 72%; } .layer-assembly i:nth-child(18) { left: 72%; top: 72%; }
-.layer-assembly i:nth-child(19) { left: 90%; top: 36%; } .layer-assembly i:nth-child(20) { left: 36%; top: 90%; }
-.layer-assembly i:nth-child(21) { left: 72%; top: 90%; } .layer-assembly i:nth-child(22) { left: 90%; top: 72%; }
 
 /* ---------------------------------------------------------------- process */
 
@@ -467,13 +451,57 @@ html[data-splash="skip"] .splash { display: none; }
 .services-heading h2 span { color: var(--tech); }
 .service-sequence { border-top: 1px solid color-mix(in oklab, var(--on-dark) 20%, transparent); }
 .kinetic-service { position: relative; display: grid; min-height: 72svh; grid-template-columns: 0.8fr 1.2fr; align-items: center; border-bottom: 1px solid color-mix(in oklab, var(--on-dark) 20%, transparent); overflow: hidden; }
-.service-number {
-  font-size: clamp(10rem, 28vw, 28rem);
+/*
+ * A plinth in perspective holding a live 3D piece, in place of the flat
+ * number tile. The number moves to the corner and labels the frame.
+ */
+.service-frame {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate3d(calc(var(--scrub) * -4%), calc(var(--scrub) * 22%), 0);
+  will-change: transform;
+}
+
+.service-frame-plinth {
+  position: relative;
+  width: min(30vw, 330px);
+  aspect-ratio: 1;
+  border: 1px solid color-mix(in oklab, var(--on-dark) 26%, transparent);
+  background: color-mix(in oklab, var(--on-dark) 6%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in oklab, var(--on-dark) 18%, transparent),
+    0 30px 60px -30px rgb(0 0 0 / 65%);
+  transform: perspective(900px) rotateY(-15deg) rotateX(7deg);
+}
+
+/* Corner ticks, so the frame reads as a machined fixture. */
+.service-frame-plinth::before,
+.service-frame-plinth::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--tech);
+  opacity: 0.7;
+}
+.service-frame-plinth::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
+.service-frame-plinth::after { right: -1px; bottom: -1px; border-width: 0 1px 1px 0; }
+
+.service-frame-stage { position: absolute; inset: 5%; }
+.service-frame-stage canvas { display: block; width: 100% !important; height: 100% !important; }
+
+.service-frame-number {
+  position: absolute;
+  top: -0.32em;
+  left: -0.12em;
+  font-size: clamp(4rem, 11vw, 9rem);
   font-weight: 800;
   line-height: 0.7;
-  opacity: 0.1;
-  transform: translate3d(calc(-8% + var(--scrub) * -5%), calc(var(--scrub) * 26%), 0);
-  will-change: transform;
+  color: var(--on-dark);
+  opacity: 0.16;
+  pointer-events: none;
 }
 .service-content {
   position: relative;
@@ -514,22 +542,22 @@ html[data-splash="skip"] .splash { display: none; }
     transition-duration: 0.01ms !important;
   }
   .phase-copy { opacity: 1 !important; }
-  [data-kinetic-word], [data-module], [data-reveal-line], .hero-line > span,
+  [data-kinetic-word], [data-reveal-line], .hero-line > span,
   .hero-copy > p, .hero-copy > div { opacity: 1 !important; transform: none !important; }
-  .hero-copy, .hero-macro, .layer-assembly { transform: none !important; }
-  .service-number, .service-content, .contact-title { transform: none !important; }
+  .hero-copy, .hero-macro, .hero-macro span { transform: none !important; }
+  .service-frame, .service-content, .contact-title { transform: none !important; }
 }
 
 @media (max-width: 767px) {
   .kinetic-hero { min-height: 135svh; }
   .hero-copy { justify-content: flex-end; padding-bottom: 14vh; }
   .hero-line-shift { padding-left: 7vw; }
-  .layer-assembly { left: -26vw; top: 10vh; width: 78vw; height: 78vw; opacity: 0.6; }
   .hero-macro { right: -4vw; bottom: 30vh; width: 42vw; }
   .hero-copy > div { align-items: flex-start; flex-direction: column; }
   .hero-index { right: 1.25rem; bottom: 1rem; }
   .kinetic-service { min-height: 74svh; grid-template-columns: 1fr; align-content: center; }
-  .service-number { position: absolute; inset: 15% auto auto -4%; font-size: 15rem; }
+  .service-frame { justify-content: flex-start; }
+  .service-frame-plinth { width: 62vw; }
   .service-content { padding: 5rem 0; }
   .kinetic-service-tech { direction: ltr; }
   .contact-row { align-items: flex-start; flex-direction: column; }

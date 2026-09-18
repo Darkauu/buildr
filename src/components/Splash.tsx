@@ -1,6 +1,6 @@
 import { animate, stagger } from "animejs";
 import { useEffect, useRef, useState } from "react";
-import { startBoot, subscribeBoot } from "@/lib/boot";
+import { startBoot, subscribeBoot, type BootStage } from "@/lib/boot";
 import { markIntroDone } from "@/lib/intro";
 
 /**
@@ -18,8 +18,24 @@ import { markIntroDone } from "@/lib/intro";
  */
 
 const SESSION_KEY = "strata:splash-shown";
-const MIN_VISIBLE_MS = 900;
+/**
+ * Deliberate floor on how long the splash is readable.
+ *
+ * The counter is gated on this as well as on real load progress, so a warm
+ * cache cannot flash the panel past before anyone has read the wordmark. Real
+ * loading longer than this still wins — the counter never lies about progress,
+ * it is only prevented from finishing early.
+ */
+const MIN_VISIBLE_MS = 2600;
 const PEEL_LAYERS = 14;
+
+/** What the panel names while each asset is still in flight. */
+const STAGE_COPY: Record<BootStage, string> = {
+  fonts: "Tipografías",
+  image: "Fotografía",
+  model: "Modelo de impresora",
+  done: "Listo",
+};
 
 type SplashProps = {
   modelUrl: string;
@@ -35,6 +51,7 @@ export function Splash({ modelUrl, imageUrl }: SplashProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const counterRef = useRef<HTMLSpanElement>(null);
   const barRef = useRef<HTMLSpanElement>(null);
+  const stageRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -70,6 +87,8 @@ export function Splash({ modelUrl, imageUrl }: SplashProps) {
     let displayed = 0;
     let actual = 0;
     let ready = false;
+    let stage: BootStage = "fonts";
+    let shownStage: BootStage | null = null;
     let frame = 0;
     let exiting = false;
 
@@ -120,14 +139,24 @@ export function Splash({ modelUrl, imageUrl }: SplashProps) {
 
     const tick = () => {
       frame = requestAnimationFrame(tick);
-      displayed += (actual - displayed) * 0.12;
-      if (ready && actual - displayed < 0.005) displayed = actual;
+      const elapsed = performance.now() - shownAt;
 
-      const percent = Math.round(displayed * 100);
+      // Two ceilings, whichever is lower: what has actually loaded, and how far
+      // the clock allows. The second is what makes the panel readable on a warm
+      // cache; the first keeps the number honest on a slow one.
+      const ceiling = Math.min(actual, elapsed / MIN_VISIBLE_MS);
+      displayed += (ceiling - displayed) * 0.14;
+      if (ceiling - displayed < 0.004) displayed = ceiling;
+
+      const percent = Math.min(100, Math.round(displayed * 100));
       if (counterRef.current) counterRef.current.textContent = String(percent).padStart(3, "0");
       if (barRef.current) barRef.current.style.transform = `scaleX(${displayed.toFixed(4)})`;
+      if (stageRef.current && stage !== shownStage) {
+        shownStage = stage;
+        stageRef.current.textContent = STAGE_COPY[stage];
+      }
 
-      if (ready && percent >= 100 && performance.now() - shownAt >= MIN_VISIBLE_MS) {
+      if (ready && percent >= 100 && elapsed >= MIN_VISIBLE_MS) {
         cancelAnimationFrame(frame);
         frame = 0;
         exit();
@@ -138,6 +167,7 @@ export function Splash({ modelUrl, imageUrl }: SplashProps) {
     const unsubscribe = subscribeBoot((state) => {
       actual = state.progress;
       ready = state.ready;
+      stage = state.stage;
     });
 
     return () => {
@@ -181,7 +211,12 @@ export function Splash({ modelUrl, imageUrl }: SplashProps) {
 
       <div data-splash-fade className="splash-progress">
         <div className="splash-progress-row">
-          <span data-splash-meta>Preparando taller</span>
+          <span data-splash-meta>
+            Preparando taller{" "}
+            <span className="splash-stage" ref={stageRef}>
+              Tipografías
+            </span>
+          </span>
           <span>
             <span ref={counterRef}>000</span>
             <span aria-hidden="true">%</span>

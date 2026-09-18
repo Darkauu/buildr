@@ -64,6 +64,12 @@ export function PrintProcess() {
     };
   }, []);
 
+  // The cube field reads this to spell out whichever phase is on screen.
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (section) section.dataset["phaseTitle"] = phases[activePhase]?.title ?? "Proceso";
+  }, [activePhase]);
+
   useEffect(() => {
     if (reducedMotion) return;
     const activeCopy = sectionRef.current?.querySelector<HTMLElement>(
