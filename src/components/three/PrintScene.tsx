@@ -36,6 +36,13 @@ const MODEL_URL = printerModelUrl;
 const TARGET_HEIGHT = 5.4;
 const SLICE_LAYERS = 34;
 const PRINTER_OFFSET = new THREE.Vector3(-1.05, -0.15, 0);
+/**
+ * World units per model-local unit, before the group scale.
+ *
+ * Measured from the glTF: nudging any carriage by 1 local unit moves it 0.0254
+ * in the model's own space (the file is authored in inches).
+ */
+const LOCAL_UNIT = 0.0254;
 
 useGLTF.preload(MODEL_URL, false);
 
@@ -52,6 +59,8 @@ type PrinterModel = {
   gantry: THREE.Object3D | null;
   extruder: THREE.Object3D | null;
   bed: THREE.Object3D | null;
+  /** Home positions, captured before anything animates them. */
+  rest: { gantryZ: number; extruderX: number; bedY: number };
 };
 
 function usePrinterModel(palette: Palette): PrinterModel {
@@ -119,15 +128,26 @@ function usePrinterModel(palette: Palette): PrinterModel {
       (plateCenter.z + offset.z) * scale,
     ).add(PRINTER_OFFSET);
 
+    const gantry = root.getObjectByName("Gantry") ?? null;
+    const extruder = root.getObjectByName("Extruder_Assembly") ?? null;
+    // `Bed` carries the plate, the mat and the four levelling knobs, so moving
+    // it takes the whole Y carriage with it.
+    const bed = root.getObjectByName("Bed") ?? null;
+
     return {
       root,
       scale,
       offset,
       anchor,
       materials: Array.from(materials),
-      gantry: root.getObjectByName("Gantry") ?? null,
-      extruder: root.getObjectByName("Extruder_Assembly") ?? null,
-      bed: root.getObjectByName("Bed") ?? null,
+      gantry,
+      extruder,
+      bed,
+      rest: {
+        gantryZ: gantry?.position.z ?? 0,
+        extruderX: extruder?.position.x ?? 0,
+        bedY: bed?.position.y ?? 0,
+      },
     };
   }, [palette, scene]);
 }
@@ -155,14 +175,7 @@ function Printer({
 }) {
   const opacityRef = useRef(1);
   const paperColor = useMemo(() => new THREE.Color(palette.paper), [palette.paper]);
-  const rest = useMemo(
-    () => ({
-      gantryZ: model.gantry?.position.z ?? 0,
-      extruderX: model.extruder?.position.x ?? 0,
-      bedY: model.bed?.position.y ?? 0,
-    }),
-    [model],
-  );
+  const rest = model.rest;
 
   const axes = useMemo(createAxisState, []);
 
@@ -174,17 +187,19 @@ function Printer({
       return;
     }
 
-    const tune = createTuneTimeline(axes);
-    const print = createPrintTimeline(axes);
-    tune.pause();
-    print.pause();
-
-    if (phase === 0) tune.play();
-    else if (phase === 3) print.play();
+    // Only ever build the timeline this phase needs.
+    //
+    // Creating both and pausing one looks harmless but is not: anime.js
+    // composes animations with `replace` by default, so the print timeline —
+    // which owns x and y — cancelled the tune timeline's x and y tweens the
+    // moment it was constructed. Z survived because print never touches it,
+    // which is why the tune up moved on one axis only.
+    const timeline =
+      phase === 0 ? createTuneTimeline(axes) : phase === 3 ? createPrintTimeline(axes) : null;
+    timeline?.play();
 
     return () => {
-      tune.revert();
-      print.revert();
+      timeline?.revert();
     };
   }, [axes, phase, reducedMotion]);
 
@@ -206,9 +221,18 @@ function Printer({
     // Between the two animated phases the carriages ease back to rest rather
     // than freezing wherever the timeline happened to stop.
     const idle = phase !== 0 && phase !== 3;
+    const printProgress = THREE.MathUtils.clamp((value - 2.5) * 2, 0, 1);
     const targetX = idle ? 0 : axes.x * AXIS_LIMITS.x;
     const targetY = idle ? 0 : axes.y * AXIS_LIMITS.y;
-    const targetZ = phase === 3 ? -AXIS_LIMITS.printZ : idle ? 0 : -axes.z * AXIS_LIMITS.zDescent;
+    // While printing the gantry climbs with the piece, the way a real machine
+    // does: the nozzle stays just above the last layer instead of sitting at a
+    // fixed height and ending up inside the finished vase.
+    const targetZ =
+      phase === 3
+        ? -AXIS_LIMITS.printZ * (1 - printProgress)
+        : idle
+          ? 0
+          : -axes.z * AXIS_LIMITS.zDescent;
 
     if (model.extruder) {
       model.extruder.position.x = damp(
@@ -291,12 +315,13 @@ function CalibrationPoints({
 function Vase({
   palette,
   phaseValue,
-  anchor,
+  model,
 }: {
   palette: Palette;
   phaseValue: MutableRefObject<number>;
-  anchor: THREE.Vector3;
+  model: PrinterModel;
 }) {
+  const anchor = model.anchor;
   const groupRef = useRef<THREE.Group>(null);
   const solidRef = useRef<THREE.MeshStandardMaterial>(null);
   const ringMaterial = useRef<THREE.LineBasicMaterial>(null);
@@ -347,12 +372,18 @@ function Vase({
     const printProgress = THREE.MathUtils.clamp((value - 2.5) * 2, 0, 1);
     const onBed = value > 2.5;
 
+    // On the plate the piece is carried by the bed, so it has to travel with
+    // the Y carriage — it is sitting on it. Bed-local +y maps to world −Z.
+    const bedOffset = model.bed ? model.bed.position.y - model.rest.bedY : 0;
+    const bedWorldZ = -bedOffset * LOCAL_UNIT * model.scale;
+
     const targetX = onBed ? anchor.x : showcase.x;
     const targetY = onBed ? anchor.y : showcase.y;
-    const targetZ = onBed ? anchor.z : showcase.z;
+    const targetZ = onBed ? anchor.z + bedWorldZ : showcase.z;
     group.position.x = damp(group.position.x, targetX, 4.5, delta);
     group.position.y = damp(group.position.y, targetY, 4.5, delta);
-    group.position.z = damp(group.position.z, targetZ, 4.5, delta);
+    // Stiffer than the others: a piece that lags its own bed looks unglued.
+    group.position.z = damp(group.position.z, targetZ, onBed ? 16 : 4.5, delta);
     group.rotation.y += delta * (0.14 + designFocus * 0.4);
     group.scale.setScalar(
       damp(group.scale.x, onBed ? 0.62 : 0.74 + designFocus * 0.12, 4.5, delta),
@@ -477,7 +508,9 @@ function FileTransfer({
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const packetRefs = useRef<Array<THREE.Mesh | null>>([]);
-  const home = useMemo(() => new THREE.Vector3(anchor.x + 3.9, 3.5, anchor.z + 0.6), [anchor]);
+  // Clear of the vase: the showcase piece tops out around y 3.3, so the sheet
+  // starts above that instead of sharing the same volume.
+  const home = useMemo(() => new THREE.Vector3(anchor.x + 4.7, 4.5, anchor.z + 0.5), [anchor]);
 
   useFrame(({ clock }, rawDelta) => {
     const group = groupRef.current;
@@ -591,7 +624,7 @@ export function PrintScene({ phase, palette, reducedMotion }: PrintSceneProps) {
         reducedMotion={reducedMotion}
       />
       <CalibrationPoints palette={palette} phaseValue={phaseValue} anchor={model.anchor} />
-      <Vase palette={palette} phaseValue={phaseValue} anchor={model.anchor} />
+      <Vase palette={palette} phaseValue={phaseValue} model={model} />
       <FileTransfer palette={palette} phaseValue={phaseValue} anchor={model.anchor} />
       <mesh rotation-x={-Math.PI / 2} position={[0, -0.2, 0]} receiveShadow>
         <planeGeometry args={[18, 14, 18, 14]} />

@@ -18,7 +18,9 @@ function stripSourceAnnotationsFromThreeJsx(): Plugin {
       if (!id.includes("/components/three/")) return null;
       if (!code.includes("data-tsd-source")) return null;
       return {
-        code: code.replace(/\s*"data-tsd-source":\s*"[^"]*",?/g, "").replace(/\s*data-tsd-source="[^"]*"/g, ""),
+        code: code
+          .replace(/\s*"data-tsd-source":\s*"[^"]*",?/g, "")
+          .replace(/\s*data-tsd-source="[^"]*"/g, ""),
         map: null,
       };
     },

@@ -1,6 +1,12 @@
+/**
+ * `cubeWord` is what the background cubes spell out, which is not always the
+ * heading: it is set in English, gets an exclamation on the last step, and
+ * breaks "Model & Design" across three lines so it stacks into one block.
+ */
 export const phases = [
   {
     number: "01",
+    cubeWord: "Tune Up",
     title: "Tune up",
     label: "Impresora / calibrando",
     description:
@@ -8,6 +14,7 @@ export const phases = [
   },
   {
     number: "02",
+    cubeWord: "Model\n&\nDesign",
     title: "Model & Design",
     label: "Florero / malla activa",
     description:
@@ -15,6 +22,7 @@ export const phases = [
   },
   {
     number: "03",
+    cubeWord: "Digitalization",
     title: "Digitalización",
     label: "Archivo / generando",
     description:
@@ -22,6 +30,7 @@ export const phases = [
   },
   {
     number: "04",
+    cubeWord: "Printing!",
     title: "Printing",
     label: "Archivo cargado / imprimiendo",
     description:
