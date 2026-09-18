@@ -37,7 +37,11 @@ export default function PrintCanvas({ phase, isVisible, reducedMotion }: PrintCa
       camera={{ position: [8.6, 5.4, 10.8], fov: 34, near: 0.1, far: 80 }}
       shadows
       gl={{ antialias: true, alpha: true, powerPreference: "low-power" }}
-      onCreated={({ camera }) => camera.lookAt(0, 2.7, 0)}
+      onCreated={({ camera, gl }) => {
+        camera.lookAt(0, 2.7, 0);
+        // The printed vase is revealed by a clipping plane on its material.
+        gl.localClippingEnabled = true;
+      }}
     >
       <PrintScene phase={phase} palette={palette} reducedMotion={reducedMotion} />
     </Canvas>

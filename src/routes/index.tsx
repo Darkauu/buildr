@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
+import type { CSSProperties } from "react";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { AmbientField } from "../components/background/AmbientField";
-import { KineticMotion, LayerAssembly } from "../components/KineticMotion";
+import { KineticMotion } from "../components/KineticMotion";
 import { PrintProcess } from "../components/PrintProcess";
+import { ServiceFrame } from "../components/ServiceFrame";
 import { Splash } from "../components/Splash";
 import { printerMacroUrl, printerModelUrl } from "../lib/assets";
 
@@ -26,6 +28,9 @@ export const Route = createFileRoute("/")({
   }),
   component: Index,
 });
+
+/** Horizontal slices the hero photograph is split into. */
+const HERO_LAYERS = 9;
 
 function Index() {
   return (
@@ -72,9 +77,33 @@ function Index() {
           className="kinetic-hero tone-charcoal relative min-h-[175svh]"
         >
           <div className="sticky top-0 h-svh overflow-hidden">
-            <LayerAssembly />
-            <figure className="hero-macro" aria-hidden="true">
-              <img src={printerMacroUrl} width={1024} height={1280} fetchPriority="high" alt="" />
+            {/*
+              The photograph is cut into horizontal slices that separate and
+              slide off as the hero scrolls — the piece coming apart layer by
+              layer, which is the same idea as the rest of the page. A single
+              rotating image read as a stock flourish.
+            */}
+            <figure
+              className="hero-macro"
+              aria-hidden="true"
+              style={
+                {
+                  "--hero-macro": `url(${printerMacroUrl})`,
+                  "--hero-layers": HERO_LAYERS,
+                } as CSSProperties
+              }
+            >
+              {Array.from({ length: HERO_LAYERS }, (_, index) => (
+                <span
+                  key={index}
+                  style={
+                    {
+                      "--layer": index - (HERO_LAYERS - 1) / 2,
+                      "--layer-y": `${(index / (HERO_LAYERS - 1)) * 100}%`,
+                    } as CSSProperties
+                  }
+                />
+              ))}
             </figure>
             <div className="hero-copy absolute inset-0 mx-auto flex max-w-[1400px] flex-col justify-center px-5 pt-16 sm:px-8">
               <p data-kinetic-word className="hero-eyebrow mb-5 font-mono text-[10px] uppercase">
@@ -142,9 +171,7 @@ function Index() {
             </div>
             <div className="service-sequence">
               <article data-reveal data-scrub className="kinetic-service kinetic-service-coral">
-                <div className="service-number" aria-hidden="true">
-                  01
-                </div>
+                <ServiceFrame variant="print" number="01" />
                 <div className="service-content">
                   <span data-reveal-line className="font-mono text-[10px] uppercase">
                     Archivo listo / producir
@@ -166,9 +193,7 @@ function Index() {
                 </div>
               </article>
               <article data-reveal data-scrub className="kinetic-service kinetic-service-tech">
-                <div className="service-number" aria-hidden="true">
-                  02
-                </div>
+                <ServiceFrame variant="design" number="02" />
                 <div className="service-content">
                   <span data-reveal-line className="font-mono text-[10px] uppercase">
                     Idea inicial / resolver

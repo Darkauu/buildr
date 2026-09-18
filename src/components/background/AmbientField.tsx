@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 import * as THREE from "three";
 import { subscribeScroll } from "@/lib/scroll";
 import { ambientFragmentShader, ambientVertexShader } from "./ambient-shaders";
+import { CUBE_COUNT, CubeField } from "./CubeField";
+import { heroFormation, textFormation, type Formation } from "./cube-formations";
 
 /**
  * Site-wide ambient background.
@@ -22,8 +24,14 @@ import { ambientFragmentShader, ambientVertexShader } from "./ambient-shaders";
  */
 
 const MAX_BANDS = 4;
-/** Drawing-buffer size relative to CSS pixels. See the setPixelRatio call. */
-const RESOLUTION_SCALE = 0.5;
+/**
+ * Drawing-buffer size relative to CSS pixels.
+ *
+ * Full resolution: the shader alone would happily run at half and nobody would
+ * see it, but the cube field shares this canvas and soft-edged cubes look like
+ * a mistake. The health check below is what protects weak hardware instead.
+ */
+const RESOLUTION_SCALE = 1;
 /** Frames slower than this (10 fps) count against the field's health budget. */
 const SLOW_FRAME_MS = 100;
 /** Net slow frames tolerated before the field gives up for good. */
@@ -82,6 +90,84 @@ function readTones(): Record<string, Tone> {
   };
 }
 
+/**
+ * Palette for the cubes, read with the NORMAL conversion.
+ *
+ * The opposite of `readTones`: the cubes are lit geometry going through the
+ * standard pipeline, so their colours do need converting into the linear
+ * working space. Reusing the shader's unconverted values would wash them out.
+ */
+function readCubePalette() {
+  const styles = getComputedStyle(document.documentElement);
+  const read = (name: string, fallback: string) =>
+    new THREE.Color(styles.getPropertyValue(name).trim() || fallback);
+  return {
+    paper: read("--webgl-paper", "rgb(239, 238, 232)"),
+    peach: read("--webgl-peach", "rgb(209, 192, 165)"),
+    red: read("--webgl-red", "rgb(249, 36, 36)"),
+  };
+}
+
+/** Which shape the cubes hold, based on the section under the viewport centre. */
+function formationFor(section: HTMLElement | null): { key: string; formation: Formation } {
+  const id = section?.id ?? "inicio";
+
+  if (id === "proceso") {
+    // PrintProcess writes the active phase title onto the section.
+    const title = (section?.dataset["phaseTitle"] ?? "Proceso").toUpperCase();
+    return {
+      key: `proceso:${title}`,
+      // Phase titles vary in length, so they get the widest grid of the three.
+      // Set well back and kept faint: the printer panel and the phase copy own
+      // this section, and the title is only a watermark behind them.
+      formation: textFormation(title, {
+        target: CUBE_COUNT,
+        maxColumns: 52,
+        width: 8.2,
+        height: 2,
+        depth: 0.5,
+        presence: 0.34,
+        offset: new THREE.Vector3(0, 0.1, -3),
+      }),
+    };
+  }
+  if (id === "servicios") {
+    return {
+      key: "servicios",
+      formation: textFormation("02", {
+        target: CUBE_COUNT,
+        maxColumns: 22,
+        width: 3.2,
+        height: 2.2,
+        depth: 0.6,
+        presence: 0.5,
+        // Right edge and deep, clear of the copy column.
+        offset: new THREE.Vector3(2.9, 0.15, -2.4),
+      }),
+    };
+  }
+  if (id === "contacto") {
+    // Sits to the right of "Tu idea. En físico." rather than behind it.
+    return {
+      key: "contacto",
+      // Coarse on purpose: chunky enough to read as pixel art rather than a
+      // crowd of little cubes.
+      formation: textFormation("STRATA", {
+        target: CUBE_COUNT,
+        maxColumns: 34,
+        width: 5.2,
+        height: 1.5,
+        depth: 0.18,
+        drift: 0.05,
+        // Below the closing line and to its right, in the empty band — not
+        // across it.
+        offset: new THREE.Vector3(1.75, -1.45, 0),
+      }),
+    };
+  }
+  return { key: "hero", formation: heroFormation() };
+}
+
 export function AmbientField() {
   const hostRef = useRef<HTMLDivElement>(null);
 
@@ -105,9 +191,6 @@ export function AmbientField() {
       return; // No WebGL — CSS section colours remain in charge.
     }
 
-    // The field is soft by design, so it is rendered well below display
-    // resolution and stretched by CSS. Nothing in it has an edge sharp enough
-    // to give that away, and it cuts the per-pixel noise cost by ~4x.
     const coarse = window.matchMedia("(pointer: coarse)").matches;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, coarse ? 1 : 1.5) * RESOLUTION_SCALE);
     host.appendChild(canvas);
@@ -115,6 +198,9 @@ export function AmbientField() {
 
     const tones = readTones();
     const fallbackTone = tones["paper"]!;
+    const cubes = new CubeField(readCubePalette());
+    // Two passes share the canvas, so clearing has to be explicit.
+    renderer.autoClear = false;
 
     const uniforms = {
       uResolution: { value: new THREE.Vector2(1, 1) },
@@ -145,6 +231,7 @@ export function AmbientField() {
 
     const resize = () => {
       renderer.setSize(window.innerWidth, window.innerHeight, false);
+      cubes.resize(window.innerWidth, window.innerHeight);
       // gl_FragCoord is in drawing-buffer pixels, not CSS pixels. On a 2x
       // display those differ by the pixel ratio, and feeding the CSS size in
       // would push the band edges off-screen.
@@ -193,12 +280,27 @@ export function AmbientField() {
     // accumulate while the tab is hidden or the field jumps on return.
     let elapsed = 0;
     let last = performance.now();
+    let scrollVelocity = 0;
+
+    const syncFormation = () => {
+      const middle = window.innerHeight / 2;
+      const section =
+        Array.from(document.querySelectorAll<HTMLElement>("[data-tone]")).find((node) => {
+          const rect = node.getBoundingClientRect();
+          return rect.top <= middle && rect.bottom >= middle;
+        }) ?? null;
+      const { key, formation } = formationFor(section);
+      cubes.setFormation(key, formation);
+      cubes.setInteractivity(section?.id === "contacto" ? 1 : 0);
+    };
 
     const unsubscribe = subscribeScroll((snapshot) => {
       if (!running) return; // The field gave up; stop measuring sections for it.
       uniforms.uScroll.value = snapshot.progress;
       uniforms.uVelocity.value = THREE.MathUtils.clamp(snapshot.velocity / 90, -1, 1);
+      scrollVelocity = THREE.MathUtils.clamp(snapshot.velocity / 60, -1.5, 1.5);
       syncBands();
+      syncFormation();
     });
 
     const render = (now: number) => {
@@ -207,9 +309,17 @@ export function AmbientField() {
       last = now;
       if (!running) return;
 
-      elapsed += Math.min(rawDelta / 1000, 0.05);
+      const delta = Math.min(rawDelta / 1000, 0.05);
+      elapsed += delta;
       uniforms.uTime.value = elapsed;
+
+      cubes.update(delta, scrollVelocity);
+      renderer.clear();
       renderer.render(scene, camera);
+      // The quad writes no depth, so the cubes need a clean depth buffer to
+      // sort against each other rather than against the background.
+      renderer.clearDepth();
+      renderer.render(cubes.scene, cubes.camera);
 
       // A field that cannot keep up is worse than no field at all: the canvas
       // holds a stale frame, and a section whose text is light ends up on a
@@ -222,6 +332,13 @@ export function AmbientField() {
     };
     frame = requestAnimationFrame(render);
 
+    const onPointerMove = (event: PointerEvent) => {
+      cubes.setPointer(
+        (event.clientX / window.innerWidth) * 2 - 1,
+        -((event.clientY / window.innerHeight) * 2 - 1),
+      );
+    };
+
     const onVisibility = () => {
       running = !document.hidden;
       last = performance.now();
@@ -229,6 +346,7 @@ export function AmbientField() {
     const onResize = () => {
       resize();
       syncBands();
+      syncFormation();
     };
     /** Stops the field and restores the CSS section colours. */
     const disable = () => {
@@ -245,6 +363,7 @@ export function AmbientField() {
     };
 
     document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pointermove", onPointerMove, { passive: true });
     window.addEventListener("resize", onResize);
     canvas.addEventListener("webglcontextlost", onContextLost);
 
@@ -252,11 +371,13 @@ export function AmbientField() {
       cancelAnimationFrame(frame);
       unsubscribe();
       document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pointermove", onPointerMove);
       window.removeEventListener("resize", onResize);
       canvas.removeEventListener("webglcontextlost", onContextLost);
       document.documentElement.classList.remove("webgl-bg");
       quad.geometry.dispose();
       (quad.material as THREE.ShaderMaterial).dispose();
+      cubes.dispose();
       renderer.dispose();
       canvas.remove();
     };

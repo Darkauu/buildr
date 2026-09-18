@@ -14,7 +14,6 @@ import { scrollToElement, stickyProgress, subscribeScroll } from "@/lib/scroll";
  * headline never animates behind a cover panel.
  */
 
-const MODULES = Array.from({ length: 22 });
 const HEADER_OFFSET = 72;
 
 export function KineticMotion() {
@@ -31,13 +30,6 @@ export function KineticMotion() {
             delay: stagger(90),
             duration: 1050,
             ease: "out(4)",
-          });
-          animate("[data-module]", {
-            opacity: [0, 1],
-            scale: [0.25, 1],
-            delay: stagger(24, { from: "center" }),
-            duration: 850,
-            ease: "out(3)",
           });
           animate(".hero-line > span", {
             opacity: [0, 1],
@@ -120,14 +112,4 @@ export function KineticMotion() {
   }, []);
 
   return null;
-}
-
-export function LayerAssembly() {
-  return (
-    <div className="layer-assembly" aria-hidden="true">
-      {MODULES.map((_, index) => (
-        <i key={index} data-module />
-      ))}
-    </div>
-  );
 }

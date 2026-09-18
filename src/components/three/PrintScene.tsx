@@ -1,9 +1,22 @@
-import { Environment, Lightformer } from "@react-three/drei";
-import { useGLTF } from "@react-three/drei";
+import { Environment, Lightformer, useGLTF } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, type MutableRefObject } from "react";
 import * as THREE from "three";
 import { printerModelUrl } from "@/lib/assets";
+import {
+  AXIS_LIMITS,
+  createAxisState,
+  createPrintTimeline,
+  createTuneTimeline,
+} from "./printer-axes";
+import {
+  createControlPoints,
+  createEdgeGeometry,
+  createSliceGeometry,
+  createVaseGeometry,
+  vaseRadius,
+  VASE_DEFAULTS,
+} from "./vase-geometry";
 
 type Palette = {
   ink: string;
@@ -21,32 +34,8 @@ type PrintSceneProps = {
 
 const MODEL_URL = printerModelUrl;
 const TARGET_HEIGHT = 5.4;
-const LAYER_COUNT = 32;
+const SLICE_LAYERS = 34;
 const PRINTER_OFFSET = new THREE.Vector3(-1.05, -0.15, 0);
-
-const VASE_PROFILE: Array<[number, number]> = [
-  [0, 0.42],
-  [0.08, 0.6],
-  [0.22, 0.8],
-  [0.38, 0.87],
-  [0.54, 0.78],
-  [0.7, 0.58],
-  [0.86, 0.44],
-  [1, 0.5],
-];
-
-function vaseRadius(t: number) {
-  const clamped = THREE.MathUtils.clamp(t, 0, 1);
-  for (let i = 1; i < VASE_PROFILE.length; i += 1) {
-    const prev = VASE_PROFILE[i - 1]!;
-    const next = VASE_PROFILE[i]!;
-    if (clamped <= next[0]) {
-      const span = next[0] - prev[0] || 1;
-      return THREE.MathUtils.lerp(prev[1], next[1], (clamped - prev[0]) / span);
-    }
-  }
-  return VASE_PROFILE[VASE_PROFILE.length - 1]![1];
-}
 
 useGLTF.preload(MODEL_URL, false);
 
@@ -72,7 +61,7 @@ function usePrinterModel(palette: Palette): PrinterModel {
     const root = scene;
     const materials = new Set<THREE.MeshStandardMaterial>();
 
-    root.traverse((object) => {
+    root.traverse((object: THREE.Object3D) => {
       const mesh = object as THREE.Mesh;
       if (!mesh.isMesh) return;
       mesh.castShadow = true;
@@ -143,14 +132,24 @@ function usePrinterModel(palette: Palette): PrinterModel {
   }, [palette, scene]);
 }
 
+/**
+ * Drives the carriages from the anime.js timelines in `printer-axes`.
+ *
+ * The timelines write into a plain object; this only reads it, so no React
+ * state changes per frame. Which timeline runs is decided by the integer phase
+ * rather than the damped value, so the switch is clean instead of smeared
+ * across the transition.
+ */
 function Printer({
   model,
   palette,
+  phase,
   phaseValue,
   reducedMotion,
 }: {
   model: PrinterModel;
   palette: Palette;
+  phase: number;
   phaseValue: MutableRefObject<number>;
   reducedMotion: boolean;
 }) {
@@ -165,11 +164,35 @@ function Printer({
     [model],
   );
 
-  useFrame(({ clock }, rawDelta) => {
+  const axes = useMemo(createAxisState, []);
+
+  useEffect(() => {
+    if (reducedMotion) {
+      axes.x = 0;
+      axes.y = 0;
+      axes.z = 0;
+      return;
+    }
+
+    const tune = createTuneTimeline(axes);
+    const print = createPrintTimeline(axes);
+    tune.pause();
+    print.pause();
+
+    if (phase === 0) tune.play();
+    else if (phase === 3) print.play();
+
+    return () => {
+      tune.revert();
+      print.revert();
+    };
+  }, [axes, phase, reducedMotion]);
+
+  useFrame((_, rawDelta) => {
     const delta = Math.min(rawDelta, 0.05);
     const value = phaseValue.current;
-    const time = reducedMotion ? 0 : clock.elapsedTime;
 
+    // The machine steps back while the design and the file are the subject.
     const focus = value < 0.7 || value > 2.4 ? 1 : 0.22;
     opacityRef.current = damp(opacityRef.current, focus, 4.5, delta);
     const opacity = opacityRef.current;
@@ -180,33 +203,26 @@ function Printer({
       if (base) material.color.copy(base).lerp(paperColor, (1 - opacity) * 0.72);
     });
 
-    const tune = value < 0.8;
-    const printProgress = THREE.MathUtils.clamp(value - 2.5, 0, 1);
-    const printing = printProgress > 0.02;
+    // Between the two animated phases the carriages ease back to rest rather
+    // than freezing wherever the timeline happened to stop.
+    const idle = phase !== 0 && phase !== 3;
+    const targetX = idle ? 0 : axes.x * AXIS_LIMITS.x;
+    const targetY = idle ? 0 : axes.y * AXIS_LIMITS.y;
+    const targetZ = phase === 3 ? -AXIS_LIMITS.printZ : idle ? 0 : -axes.z * AXIS_LIMITS.zDescent;
 
     if (model.extruder) {
-      const target = tune
-        ? Math.sin(time * 1.35) * 3.6
-        : printing
-          ? Math.sin(time * 2.4) * 2.6
-          : 0;
-      model.extruder.position.x = damp(model.extruder.position.x, rest.extruderX + target, 6, delta);
+      model.extruder.position.x = damp(
+        model.extruder.position.x,
+        rest.extruderX + targetX,
+        14,
+        delta,
+      );
     }
     if (model.bed) {
-      const target = tune
-        ? Math.cos(time * 1.05) * 3.2
-        : printing
-          ? Math.cos(time * 1.85) * 2.1
-          : 0;
-      model.bed.position.y = damp(model.bed.position.y, rest.bedY + target, 6, delta);
+      model.bed.position.y = damp(model.bed.position.y, rest.bedY + targetY, 14, delta);
     }
     if (model.gantry) {
-      const target = tune
-        ? -9.5 + Math.sin(time * 0.9) * 1.6
-        : printing
-          ? -11 + printProgress * 9.5
-          : -1.5;
-      model.gantry.position.z = damp(model.gantry.position.z, rest.gantryZ + target, 3.5, delta);
+      model.gantry.position.z = damp(model.gantry.position.z, rest.gantryZ + targetZ, 8, delta);
     }
   });
 
@@ -217,7 +233,15 @@ function Printer({
   );
 }
 
-function CalibrationPoints({ palette, phaseValue, anchor }: { palette: Palette; phaseValue: MutableRefObject<number>; anchor: THREE.Vector3 }) {
+function CalibrationPoints({
+  palette,
+  phaseValue,
+  anchor,
+}: {
+  palette: Palette;
+  phaseValue: MutableRefObject<number>;
+  anchor: THREE.Vector3;
+}) {
   const groupRef = useRef<THREE.Group>(null);
 
   useFrame(({ clock }, rawDelta) => {
@@ -236,13 +260,19 @@ function CalibrationPoints({ palette, phaseValue, anchor }: { palette: Palette; 
 
   return (
     <group ref={groupRef}>
-      {([
-        [-0.82, -0.82],
-        [0.82, -0.82],
-        [-0.82, 0.82],
-        [0.82, 0.82],
-      ] as Array<[number, number]>).map(([x, z], index) => (
-        <mesh key={index} position={[anchor.x + x, anchor.y + 0.04, anchor.z + z]} rotation-x={-Math.PI / 2}>
+      {(
+        [
+          [-0.82, -0.82],
+          [0.82, -0.82],
+          [-0.82, 0.82],
+          [0.82, 0.82],
+        ] as Array<[number, number]>
+      ).map(([x, z], index) => (
+        <mesh
+          key={index}
+          position={[anchor.x + x, anchor.y + 0.04, anchor.z + z]}
+          rotation-x={-Math.PI / 2}
+        >
           <ringGeometry args={[0.1, 0.17, 20]} />
           <meshBasicMaterial color={palette.tech} transparent opacity={0} side={THREE.DoubleSide} />
         </mesh>
@@ -251,88 +281,200 @@ function CalibrationPoints({ palette, phaseValue, anchor }: { palette: Palette; 
   );
 }
 
-function Vase({ palette, phaseValue, anchor }: { palette: Palette; phaseValue: MutableRefObject<number>; anchor: THREE.Vector3 }) {
-  const designRef = useRef<THREE.Group>(null);
-  const designMaterialRef = useRef<THREE.MeshStandardMaterial>(null);
-  const layerRefs = useRef<Array<THREE.Mesh | null>>([]);
-  const points = useMemo(
-    () =>
-      Array.from({ length: 30 }, (_, index) => {
-        const y = index / 29;
-        return new THREE.Vector2(vaseRadius(y), y * 2.55);
-      }),
-    [],
+/**
+ * The vase, in its three presentations.
+ *
+ * All of them are the same parametric surface: the cage, the slice contours and
+ * the solid share one geometry, so the object visibly survives the journey
+ * instead of being swapped for a different prop at each step.
+ */
+function Vase({
+  palette,
+  phaseValue,
+  anchor,
+}: {
+  palette: Palette;
+  phaseValue: MutableRefObject<number>;
+  anchor: THREE.Vector3;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  const solidRef = useRef<THREE.MeshStandardMaterial>(null);
+  const ringMaterial = useRef<THREE.LineBasicMaterial>(null);
+  const columnMaterial = useRef<THREE.LineBasicMaterial>(null);
+  const sliceMaterial = useRef<THREE.LineBasicMaterial>(null);
+  const pointsRef = useRef<THREE.InstancedMesh>(null);
+  const sweepRef = useRef<THREE.Mesh>(null);
+  const sweepMaterial = useRef<THREE.MeshBasicMaterial>(null);
+
+  const build = useMemo(() => createVaseGeometry(), []);
+  const ringGeometry = useMemo(() => createEdgeGeometry(build.positions, build.ringEdges), [build]);
+  const columnGeometry = useMemo(
+    () => createEdgeGeometry(build.positions, build.columnEdges),
+    [build],
   );
-  const showcase = useMemo(() => new THREE.Vector3(anchor.x + 3.6, 1.55, anchor.z + 0.4), [anchor]);
+  const sliceGeometry = useMemo(() => createSliceGeometry(SLICE_LAYERS, build.options), [build]);
+  const controlPoints = useMemo(
+    () => createControlPoints(build.positions, build.options, build.stride),
+    [build],
+  );
+
+  // Reveals the solid bottom-up. Updated per frame; the renderer has local
+  // clipping switched on in PrintCanvas.
+  const clipPlane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, -1, 0), 0), []);
+  const showcase = useMemo(() => new THREE.Vector3(anchor.x + 3.5, 1.5, anchor.z + 0.4), [anchor]);
+
+  useEffect(() => {
+    const mesh = pointsRef.current;
+    if (!mesh) return;
+    const matrix = new THREE.Matrix4();
+    controlPoints.forEach((point, index) => {
+      matrix.makeTranslation(point.x, point.y, point.z);
+      mesh.setMatrixAt(index, matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+  }, [controlPoints]);
 
   useFrame(({ clock }, rawDelta) => {
-    const design = designRef.current;
-    if (!design) return;
+    const group = groupRef.current;
+    if (!group) return;
     const delta = Math.min(rawDelta, 0.05);
     const value = phaseValue.current;
+
     const designFocus = Math.max(0, 1 - Math.abs(value - 1) * 1.15);
-    const fileFocus = Math.max(0, 1 - Math.abs(value - 2) * 1.05);
-    const printFocus = THREE.MathUtils.clamp(value - 2.5, 0, 1);
+    const sliceFocus = Math.max(0, 1 - Math.abs(value - 2) * 1.05);
+    // Phase 3 settles at value 3, so the span 2.5..3 has to cover the whole
+    // build — without the doubling the vase stops half printed, forever.
+    const printProgress = THREE.MathUtils.clamp((value - 2.5) * 2, 0, 1);
     const onBed = value > 2.5;
 
-    const targetX = onBed ? anchor.x : showcase.x - (value < 1.55 ? 0 : 0.7);
+    const targetX = onBed ? anchor.x : showcase.x;
     const targetY = onBed ? anchor.y : showcase.y;
     const targetZ = onBed ? anchor.z : showcase.z;
-    design.position.x = damp(design.position.x, targetX, 4.5, delta);
-    design.position.y = damp(design.position.y, targetY, 4.5, delta);
-    design.position.z = damp(design.position.z, targetZ, 4.5, delta);
-    design.rotation.y += delta * (0.18 + designFocus * 0.45);
-    design.scale.setScalar(damp(design.scale.x, onBed ? 0.6 : 0.72 + designFocus * 0.16, 4.5, delta));
+    group.position.x = damp(group.position.x, targetX, 4.5, delta);
+    group.position.y = damp(group.position.y, targetY, 4.5, delta);
+    group.position.z = damp(group.position.z, targetZ, 4.5, delta);
+    group.rotation.y += delta * (0.14 + designFocus * 0.4);
+    group.scale.setScalar(
+      damp(group.scale.x, onBed ? 0.62 : 0.74 + designFocus * 0.12, 4.5, delta),
+    );
 
-    if (designMaterialRef.current) {
-      const targetOpacity = value < 0.55 ? 0 : value < 1.55 ? 0.3 + designFocus * 0.6 : Math.max(0, 0.4 - printFocus);
-      designMaterialRef.current.opacity = damp(designMaterialRef.current.opacity, targetOpacity, 7, delta);
+    const scale = group.scale.x;
+    const height = build.options.height;
+
+    if (ringMaterial.current) {
+      ringMaterial.current.opacity = damp(
+        ringMaterial.current.opacity,
+        designFocus * 0.85,
+        7,
+        delta,
+      );
+    }
+    if (columnMaterial.current) {
+      columnMaterial.current.opacity = damp(
+        columnMaterial.current.opacity,
+        designFocus * 0.5,
+        7,
+        delta,
+      );
+    }
+    if (pointsRef.current) {
+      const material = pointsRef.current.material as THREE.MeshBasicMaterial;
+      material.opacity = damp(material.opacity, designFocus, 7, delta);
+      const pulse = 1 + Math.sin(clock.elapsedTime * 2.4) * 0.12 * designFocus;
+      pointsRef.current.scale.setScalar(pulse);
+    }
+    if (sliceMaterial.current) {
+      sliceMaterial.current.opacity = damp(
+        sliceMaterial.current.opacity,
+        sliceFocus * 0.9,
+        7,
+        delta,
+      );
     }
 
-    layerRefs.current.forEach((layer, index) => {
-      if (!layer) return;
-      const threshold = index / LAYER_COUNT;
-      const digital = value >= 1.55 && value < 2.5 ? 0.35 + fileFocus * 0.55 : 0;
-      const printed = printFocus > threshold ? 1 : 0;
-      const targetOpacity = Math.min(1, Math.max(digital, printed));
-      const material = layer.material;
-      if (material instanceof THREE.MeshStandardMaterial) {
-        material.opacity = damp(material.opacity, targetOpacity, 8, delta);
-      }
-      layer.position.y =
-        index * 0.078 + (value >= 1.55 && value < 2.5 ? Math.sin(clock.elapsedTime * 1.6 + index * 0.45) * 0.03 : 0);
-    });
+    // Solid surface, clipped to the height printed so far.
+    if (solidRef.current) {
+      solidRef.current.opacity = damp(
+        solidRef.current.opacity,
+        printProgress > 0.01 ? 1 : 0,
+        7,
+        delta,
+      );
+      clipPlane.constant = group.position.y + printProgress * height * scale;
+    }
+
+    // One bright ring marking the active plane: the slicer's cut, then the
+    // layer being laid down.
+    if (sweepRef.current && sweepMaterial.current) {
+      const sweep = sliceFocus > 0.02 ? (clock.elapsedTime * 0.28) % 1 : printProgress;
+      const radius = vaseRadius(sweep) * 1.04;
+      sweepRef.current.position.y = sweep * height;
+      sweepRef.current.scale.setScalar(Math.max(radius, 0.001));
+      sweepMaterial.current.opacity = damp(
+        sweepMaterial.current.opacity,
+        Math.max(sliceFocus, printProgress > 0.01 && printProgress < 0.99 ? 0.9 : 0),
+        7,
+        delta,
+      );
+    }
   });
 
   return (
-    <group ref={designRef} position={showcase.toArray()}>
-      <mesh castShadow>
-        <latheGeometry args={[points, 48]} />
-        <meshStandardMaterial ref={designMaterialRef} color={palette.coral} wireframe transparent opacity={0} roughness={0.46} />
+    <group ref={groupRef} position={showcase.toArray()}>
+      {/* Model & Design: the editable cage. */}
+      <lineSegments geometry={ringGeometry}>
+        <lineBasicMaterial ref={ringMaterial} color={palette.coral} transparent opacity={0} />
+      </lineSegments>
+      <lineSegments geometry={columnGeometry}>
+        <lineBasicMaterial ref={columnMaterial} color={palette.tech} transparent opacity={0} />
+      </lineSegments>
+      <instancedMesh ref={pointsRef} args={[undefined, undefined, controlPoints.length]}>
+        <octahedronGeometry args={[0.045, 0]} />
+        <meshBasicMaterial color={palette.tech} transparent opacity={0} />
+      </instancedMesh>
+
+      {/* Digitalización: the same surface read as slice contours. */}
+      <lineSegments geometry={sliceGeometry}>
+        <lineBasicMaterial ref={sliceMaterial} color={palette.coral} transparent opacity={0} />
+      </lineSegments>
+
+      {/* Printing: the solid, revealed bottom-up. */}
+      <mesh geometry={build.geometry} castShadow>
+        <meshStandardMaterial
+          ref={solidRef}
+          color={palette.coral}
+          roughness={0.62}
+          metalness={0.05}
+          side={THREE.DoubleSide}
+          transparent
+          opacity={0}
+          clippingPlanes={[clipPlane]}
+        />
       </mesh>
-      {Array.from({ length: LAYER_COUNT }, (_, index) => {
-        const y = index / (LAYER_COUNT - 1);
-        const radius = vaseRadius(y);
-        return (
-          <mesh
-            key={index}
-            ref={(node) => {
-              layerRefs.current[index] = node;
-            }}
-            position={[0, index * 0.078, 0]}
-            rotation-x={Math.PI / 2}
-            castShadow
-          >
-            <torusGeometry args={[radius, 0.045, 6, 44]} />
-            <meshStandardMaterial color={index % 5 === 0 ? palette.tech : palette.coral} transparent opacity={0} roughness={0.55} />
-          </mesh>
-        );
-      })}
+
+      <mesh ref={sweepRef} rotation-x={-Math.PI / 2}>
+        <ringGeometry args={[0.97, 1.03, 64]} />
+        <meshBasicMaterial
+          ref={sweepMaterial}
+          color={palette.tech}
+          transparent
+          opacity={0}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
     </group>
   );
 }
 
-function FileTransfer({ palette, phaseValue, anchor }: { palette: Palette; phaseValue: MutableRefObject<number>; anchor: THREE.Vector3 }) {
+function FileTransfer({
+  palette,
+  phaseValue,
+  anchor,
+}: {
+  palette: Palette;
+  phaseValue: MutableRefObject<number>;
+  anchor: THREE.Vector3;
+}) {
   const groupRef = useRef<THREE.Group>(null);
   const packetRefs = useRef<Array<THREE.Mesh | null>>([]);
   const home = useMemo(() => new THREE.Vector3(anchor.x + 3.9, 3.5, anchor.z + 0.6), [anchor]);
@@ -346,7 +488,7 @@ function FileTransfer({ palette, phaseValue, anchor }: { palette: Palette; phase
     const transfer = THREE.MathUtils.clamp(1 - Math.abs(value - 2.5) * 1.6, 0, 1);
     group.scale.setScalar(damp(group.scale.x, 0.62 + focus * 0.3, 6, delta));
     group.position.y = damp(group.position.y, home.y + focus * 0.18, 6, delta);
-    group.traverse((object) => {
+    group.traverse((object: THREE.Object3D) => {
       const mesh = object as THREE.Mesh;
       if (!mesh.isMesh) return;
       const material = mesh.material as THREE.Material & { opacity: number };
@@ -374,7 +516,11 @@ function FileTransfer({ palette, phaseValue, anchor }: { palette: Palette; phase
       {[0, 1, 2, 3, 4].map((index) => (
         <mesh key={index} position={[0, 0.22 - index * 0.2, 0.09]}>
           <boxGeometry args={[0.82 - (index % 2) * 0.18, 0.045, 0.04]} />
-          <meshBasicMaterial color={index === 3 ? palette.tech : palette.ink} transparent opacity={0} />
+          <meshBasicMaterial
+            color={index === 3 ? palette.tech : palette.ink}
+            transparent
+            opacity={0}
+          />
         </mesh>
       ))}
       {[0, 1, 2, 3].map((index) => (
@@ -422,10 +568,28 @@ export function PrintScene({ phase, palette, reducedMotion }: PrintSceneProps) {
       <directionalLight position={[-6, 4, -4]} intensity={0.3} color={palette.paper} />
       <Environment>
         <Lightformer intensity={2.6} position={[0, 6, 3]} scale={[10, 8, 1]} />
-        <Lightformer intensity={0.5} color={palette.tech} position={[-7, 2, 1]} rotation-y={Math.PI / 2} scale={[9, 4, 1]} />
-        <Lightformer intensity={0.7} color={palette.coral} position={[6, 3, 2]} rotation-y={-Math.PI / 3} scale={[7, 4, 1]} />
+        <Lightformer
+          intensity={0.5}
+          color={palette.tech}
+          position={[-7, 2, 1]}
+          rotation-y={Math.PI / 2}
+          scale={[9, 4, 1]}
+        />
+        <Lightformer
+          intensity={0.7}
+          color={palette.coral}
+          position={[6, 3, 2]}
+          rotation-y={-Math.PI / 3}
+          scale={[7, 4, 1]}
+        />
       </Environment>
-      <Printer model={model} palette={palette} phaseValue={phaseValue} reducedMotion={reducedMotion} />
+      <Printer
+        model={model}
+        palette={palette}
+        phase={phase}
+        phaseValue={phaseValue}
+        reducedMotion={reducedMotion}
+      />
       <CalibrationPoints palette={palette} phaseValue={phaseValue} anchor={model.anchor} />
       <Vase palette={palette} phaseValue={phaseValue} anchor={model.anchor} />
       <FileTransfer palette={palette} phaseValue={phaseValue} anchor={model.anchor} />
@@ -436,3 +600,5 @@ export function PrintScene({ phase, palette, reducedMotion }: PrintSceneProps) {
     </>
   );
 }
+
+export { VASE_DEFAULTS };
